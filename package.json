@@ -1,0 +1,89 @@
+{
+  "name": "transport-management",
+  "version": "1.0.17",
+  "description": "Transport Management Desktop Software",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "electron": "node electron/wait-and-launch.cjs",
+    "start": "concurrently -k \"npm run dev\" \"node electron/wait-and-launch.cjs\"",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.transport.management",
+    "productName": "Hariom Transport Management System",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build",
+        "to": "build",
+        "filter": [
+          "icon.ico",
+          "icon.png"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Hariom Transport Management System",
+      "uninstallDisplayName": "Hariom Transport Management System",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  },
+  "keywords": [
+    "transport",
+    "lr",
+    "billing",
+    "electron",
+    "react"
+  ],
+  "author": "Transport Co.",
+  "license": "ISC",
+  "dependencies": {
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^0.525.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.7.0",
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.5.2",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^10.0.4",
+    "electron": "^37.1.0",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
+    "postcss": "^8.5.6",
+    "sharp": "^0.35.3",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.3.5"
+  }
+}
