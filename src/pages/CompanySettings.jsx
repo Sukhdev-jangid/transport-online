@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Save, RotateCcw, Upload, Trash2, Building2, Eye, Database, FolderOpen, HardDriveDownload, HardDriveUpload, Lock, X, Hash, Plus, Printer, Zap } from 'lucide-react'
-import { getCompanySettings, saveCompanySettings, changePassword, getLRNumberSettings, saveLRNumberSettings, peekNextLRNumber, getCurrentMaxLRNumber, getPrinterSettings, savePrinterSettings } from '../db/database'
+import { getCompanySettings, saveCompanySettings, getLRNumberSettings, saveLRNumberSettings, peekNextLRNumber, getCurrentMaxLRNumber, getPrinterSettings, savePrinterSettings } from '../db/database'
+import { changePassword } from '../db/auth'
 import { COMPANY, COMPANY_DEFAULTS } from '../config/company'
 import BiltyDocument from '../components/BiltyDocument'
 import A5Page from '../components/A5Page'
@@ -90,19 +91,31 @@ export default function CompanySettings() {
   const [printers, setPrinters] = useState([])
 
   useEffect(() => {
-    const saved = getCompanySettings()
-    if (saved) setForm(toForm({ ...COMPANY, ...saved }))
-    setLrForm(getLRNumberSettings())
-    setNextLR(peekNextLRNumber())
-    setMaxLR(getCurrentMaxLRNumber())
-    setPrinterForm(getPrinterSettings())
+    let active = true
+    ;(async () => {
+      const [saved, lr, next, max, printer] = await Promise.all([
+        getCompanySettings(),
+        getLRNumberSettings(),
+        peekNextLRNumber(),
+        getCurrentMaxLRNumber(),
+        getPrinterSettings(),
+      ])
+      if (!active) return
+      if (saved) setForm(toForm({ ...COMPANY, ...saved }))
+      setLrForm(lr)
+      setNextLR(next)
+      setMaxLR(max)
+      setPrinterForm(printer)
+    })()
     if (window.electronAPI?.getPrinters) {
       window.electronAPI.getPrinters().then(list => {
+        if (!active) return
         const physical = (list || []).filter(p => !/onenote|fax|xps/i.test(p.name))
         setPrinters(physical)
       }).catch(() => {})
     }
     refreshBackups()
+    return () => { active = false }
   }, [])
 
   const refreshBackups = async () => {
@@ -213,7 +226,7 @@ export default function CompanySettings() {
     e.target.value = ''   // allow re-selecting the same file later
   }
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) { showToast('Company name is required!', 'error'); return }
     try {
@@ -226,7 +239,7 @@ export default function CompanySettings() {
       // both the app logo and the bill logo.
       if (!payload.logoDataUrl?.startsWith('data:')) payload.logoDataUrl = ''
       if (!payload.billLogoDataUrl?.startsWith('data:')) payload.billLogoDataUrl = ''
-      saveCompanySettings(payload)
+      await saveCompanySettings(payload)
       setPreviewTick(t => t + 1)   // force preview to re-render with new values
       showToast('✓ Company settings saved! Bills will use these details.')
     } catch (err) { showToast('Error: ' + err.message, 'error') }
@@ -237,22 +250,23 @@ export default function CompanySettings() {
     showToast('Restored default values — click Save to apply.', 'success')
   }
 
-  const handleSaveLR = (e) => {
+  const handleSaveLR = async (e) => {
     e.preventDefault()
     try {
       // No prefix — the bill already prints the static "LR. No :" label, so the
       // number stands alone (2400, 2401 …).
-      const saved = saveLRNumberSettings({ startNumber: lrForm.startNumber })
+      const saved = await saveLRNumberSettings({ startNumber: lrForm.startNumber })
       setLrForm(saved)
-      setNextLR(peekNextLRNumber())
-      showToast(`✓ LR number saved! Next bill will be ${peekNextLRNumber()}`)
+      const next = await peekNextLRNumber()
+      setNextLR(next)
+      showToast(`✓ LR number saved! Next bill will be ${next}`)
     } catch (err) { showToast('Error: ' + err.message, 'error') }
   }
 
-  const handleSavePrinter = (e) => {
+  const handleSavePrinter = async (e) => {
     e.preventDefault()
     try {
-      const saved = savePrinterSettings(printerForm)
+      const saved = await savePrinterSettings(printerForm)
       setPrinterForm(saved)
       showToast('✓ Printer & Direct Print settings saved!')
     } catch (err) { showToast('Error: ' + err.message, 'error') }

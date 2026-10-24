@@ -36,15 +36,14 @@ export default function Bilty() {
   const [toast, setToast] = useState(null)
 
   const [refreshing, setRefreshing] = useState(false)
-  const loadEntries = () => setEntries(getLREntries())
+  const loadEntries = async () => setEntries(await getLREntries())
   useEffect(() => { loadEntries() }, [])
 
-  // Hard refresh: re-read the transport.db file from disk, then reload this
-  // page's data from it — no window reload, so the app never logs out.
+  // Hard refresh: re-fetch the bill list from Supabase.
   const hardRefresh = async () => {
     if (refreshing) return
     setRefreshing(true)
-    try { await reloadDatabase(); loadEntries() }
+    try { await reloadDatabase(); await loadEntries() }
     finally { setRefreshing(false) }
   }
 
@@ -57,10 +56,10 @@ export default function Bilty() {
   // confirm dialog first; the actual settle happens in confirmMarkPaid.
   const markPaid = (e) => setConfirmPay(e)
 
-  const confirmMarkPaid = () => {
+  const confirmMarkPaid = async () => {
     const e = confirmPay
     if (!e) return
-    setEntries(markLRPaid(e.id))
+    setEntries(await markLRPaid(e.id))
     setConfirmPay(null)
     showToast(`✓ ${e.lr_number} marked as Paid!`)
   }
@@ -69,10 +68,10 @@ export default function Bilty() {
   // Opens a confirm dialog first; the settle happens in confirmMarkAllPaid.
   const [confirmPayAll, setConfirmPayAll] = useState(false)
 
-  const confirmMarkAllPaid = () => {
+  const confirmMarkAllPaid = async () => {
     const ids = [...selected]
     if (ids.length === 0) { setConfirmPayAll(false); return }
-    setEntries(markLRsPaid(ids))
+    setEntries(await markLRsPaid(ids))
     setConfirmPayAll(false)
     clearSelection()
     showToast(`✓ ${ids.length} bill${ids.length > 1 ? 's' : ''} marked as Paid!`)
@@ -92,7 +91,8 @@ export default function Bilty() {
   const paged = filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
 
   // Map a stored row to the shape both the printable Bilty and the message use.
-  const toBilty = (e) => ({
+  // Async because the per-item rows are fetched from Supabase.
+  const toBilty = async (e) => ({
     lrNumber: e.lr_number, date: e.date, fromCity: e.from_city, toCity: e.to_city,
     consignor: e.consignor, consignorPhone: e.consignor_phone, consignorAddress: e.consignor_address,
     consignee: e.consignee, consigneePhone: e.consignee_phone, consigneeAddress: e.consignee_address,
@@ -101,19 +101,19 @@ export default function Bilty() {
     totalAmount: e.total_amount,
     advancePaid: e.advance_paid, balanceDue: e.balance_due, paymentType: e.payment_type,
     // Load the per-item rows (qty + rate) so the bill can show "qty X rate".
-    itemsList: getShipmentItems(e.id).map(it => ({
+    itemsList: (await getShipmentItems(e.id)).map(it => ({
       itemName: it.item_name, quantity: it.quantity,
       rate: it.rate, totalAmount: it.total_amount,
     })),
   })
 
-  const openBilty = (e) => setActiveBilty(toBilty(e))
+  const openBilty = async (e) => setActiveBilty(await toBilty(e))
   const viewDetail = (e) => navigate(`/bilty/${encodeURIComponent(e.lr_number)}`)
-  const sendWhatsApp = (e) => sendBiltyWhatsApp(toBilty(e))
+  const sendWhatsApp = async (e) => sendBiltyWhatsApp(await toBilty(e))
   // Download WITHOUT opening the drawer: render the printable bill hidden on the
   // page, then run the same printToPDF path as the Print/PDF button. No drawer,
   // no slide animation → no transform to shift the bill, so the PDF is correct.
-  const downloadPdf = (e) => setPdfLr(toBilty(e))
+  const downloadPdf = async (e) => setPdfLr(await toBilty(e))
 
   // Once the hidden bill is on the page and its logo image has loaded, save the
   // PDF, then clear it. Falls back to the html2canvas method in a plain browser.

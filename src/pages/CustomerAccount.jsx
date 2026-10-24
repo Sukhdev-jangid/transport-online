@@ -53,8 +53,16 @@ export default function CustomerAccount() {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
-  const customer = useMemo(() => getCustomers().find(c => c.id === custId), [custId])
-  const acct = useMemo(() => getCustomerAccount(custId), [custId])
+  const EMPTY_ACCT = { bills: [], totalBills: 0, asSender: 0, asReceiver: 0, asBoth: 0, totalAmount: 0, senderAmount: 0, receiverAmount: 0, toPay: 0 }
+  const [customer, setCustomer] = useState(undefined)   // undefined = loading, null = not found
+  const [acct, setAcct] = useState(EMPTY_ACCT)
+
+  useEffect(() => {
+    let active = true
+    getCustomers().then(list => { if (active) setCustomer(list.find(c => c.id === custId) || null) })
+    getCustomerAccount(custId).then(a => { if (active) setAcct(a) })
+    return () => { active = false }
+  }, [custId])
 
   // Period + payment define the page SCOPE — the cards count only bills inside
   // this scope, so picking a month shows that month's totals. Role (All/Sent/
@@ -73,6 +81,14 @@ export default function CustomerAccount() {
   useEffect(() => { document.querySelector('main')?.scrollTo({ top: 0 }) }, [custId])
   // Reset to the first page whenever a filter or page size changes the result set.
   useEffect(() => { setPage(0) }, [custId, roleFilter, payFilter, dateRange, rowsPerPage])
+
+  if (customer === undefined) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-16 text-slate-400">Loading account…</div>
+      </div>
+    )
+  }
 
   if (!customer) {
     return (

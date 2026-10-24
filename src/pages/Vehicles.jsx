@@ -24,7 +24,7 @@ export default function Vehicles() {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
-  const loadVehicles = () => setVehicles(getVehicles())
+  const loadVehicles = async () => setVehicles(await getVehicles())
   useEffect(() => { loadVehicles() }, [])
 
   const filtered = vehicles.filter(v =>
@@ -40,16 +40,16 @@ export default function Vehicles() {
 
   const resetForm = () => { setForm(emptyForm); setEditId(null); setTypeIsOther(false); setOwnershipIsOther(false) }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.vehicleNumber.trim()) { showToast('Vehicle number is required!', 'error'); return }
     if (!form.vehicleType.trim()) { showToast('Please type the vehicle type!', 'error'); return }
     try {
       if (editId) {
-        setVehicles(updateVehicle(editId, form))
+        setVehicles(await updateVehicle(editId, form))
         showToast('✓ Vehicle updated!')
       } else {
-        setVehicles(addVehicle(form))
+        setVehicles(await addVehicle(form))
         showToast('✓ Vehicle saved successfully!')
       }
       resetForm()
@@ -73,9 +73,9 @@ export default function Vehicles() {
     document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     try {
-      setVehicles(deleteVehicle(id))
+      setVehicles(await deleteVehicle(id))
       showToast('✓ Vehicle deleted!')
       if (editId === id) resetForm()
     } catch (err) { showToast('Error: ' + err.message, 'error') }

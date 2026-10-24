@@ -17,8 +17,8 @@ const Field = ({ label, value }) => (
   </div>
 )
 
-// Map a stored DB row to the shape the printable Bilty expects.
-const toBilty = (e) => ({
+// Map a stored DB row (+ its already-loaded item rows) to the printable shape.
+const toBilty = (e, itemRows = []) => ({
   lrNumber: e.lr_number, date: e.date, fromCity: e.from_city, toCity: e.to_city,
   consignor: e.consignor, consignorPhone: e.consignor_phone, consignorAddress: e.consignor_address,
   consignee: e.consignee, consigneePhone: e.consignee_phone, consigneeAddress: e.consignee_address,
@@ -27,7 +27,7 @@ const toBilty = (e) => ({
   totalAmount: e.total_amount,
   advancePaid: e.advance_paid, balanceDue: e.balance_due, paymentType: e.payment_type,
   // Per-item rows (qty + rate) so the bill can show "qty X rate".
-  itemsList: getShipmentItems(e.id).map(it => ({
+  itemsList: itemRows.map(it => ({
     itemName: it.item_name, quantity: it.quantity,
     rate: it.rate, totalAmount: it.total_amount,
   })),
@@ -45,12 +45,22 @@ export default function BillDetail() {
   const { lrNumber } = useParams()
   const navigate = useNavigate()
   const [entry, setEntry] = useState(undefined) // undefined = loading, null = not found
+  const [itemsList, setItemsList] = useState([])
   const [showPrint, setShowPrint] = useState(false)
   const [toast, setToast] = useState(null)
 
   useEffect(() => {
-    const found = getLREntries().find(e => e.lr_number === lrNumber)
-    setEntry(found || null)
+    let active = true
+    getLREntries().then(async rows => {
+      const found = rows.find(e => e.lr_number === lrNumber) || null
+      if (!active) return
+      setEntry(found)
+      if (found) {
+        const items = await getShipmentItems(found.id)
+        if (active) setItemsList(items)
+      }
+    })
+    return () => { active = false }
   }, [lrNumber])
 
   const showToast = (msg) => {
@@ -59,9 +69,9 @@ export default function BillDetail() {
   }
 
   // Change the bill's payment status and refresh the row shown on this page.
-  const changePayment = (type) => {
+  const changePayment = async (type) => {
     if (!entry || entry.payment_type === type) return
-    const rows = setLRPaymentType(entry.id, type)
+    const rows = await setLRPaymentType(entry.id, type)
     const updated = rows.find(r => r.id === entry.id)
     if (updated) setEntry(updated)
     const label = PAYMENT_OPTIONS.find(o => o.key === type)?.label || type
@@ -88,8 +98,7 @@ export default function BillDetail() {
 
   const current = entry.payment_type || 'ToPay'
 
-  // Per-item rows and the charge breakdown for the details cards.
-  const itemsList = getShipmentItems(entry.id)
+  // Charge breakdown for the details cards (itemsList is loaded in state).
   const charges = [
     ['Freight', entry.freight],
     ['B. Charge', entry.b_charge],
@@ -239,7 +248,7 @@ export default function BillDetail() {
         </div>
       </div>
 
-      {showPrint && <BiltyInvoiceModal lrData={toBilty(entry)} onClose={() => setShowPrint(false)} />}
+      {showPrint && <BiltyInvoiceModal lrData={toBilty(entry, itemsList)} onClose={() => setShowPrint(false)} />}
 
       {toast && (
         <div className="fixed bottom-5 left-5 px-4 py-2.5 rounded-lg bg-green-600 text-white text-xs font-semibold shadow-lg toast-anim">

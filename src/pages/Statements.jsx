@@ -81,22 +81,25 @@ export default function Statements() {
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
   const [refreshing, setRefreshing] = useState(false)
-  const loadData = () => {
-    const lrs = getLREntries()
+  const [allCustomers, setAllCustomers] = useState([])
+  const loadData = async () => {
+    const [lrs, stmts, custs] = await Promise.all([
+      getLREntries(), getStatements(), getCustomers(),
+    ])
     setEntries(lrs)
-    setStatements(getStatements())
+    setStatements(stmts)
+    setAllCustomers(custs)
   }
 
   useEffect(() => {
     loadData()
   }, [])
 
-  // Hard refresh: re-read transport.db from disk, then reload this page's data
-  // from it — no window reload, so the app never logs out.
+  // Hard refresh: re-fetch this page's data from Supabase.
   const hardRefresh = async () => {
     if (refreshing) return
     setRefreshing(true)
-    try { await reloadDatabase(); loadData() }
+    try { await reloadDatabase(); await loadData() }
     finally { setRefreshing(false) }
   }
 
@@ -104,8 +107,6 @@ export default function Statements() {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3000)
   }
-
-  const allCustomers = useMemo(() => getCustomers(), [])
 
   // Build unique Party options list based on role with ID & phone/city metadata
   const partySelectOptions = useMemo(() => {
@@ -351,10 +352,16 @@ export default function Statements() {
 
   const pagedHistory = filteredHistory.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
 
+  // bilty_ids comes back from Supabase as a jsonb array already, but older rows
+  // (or the legacy SQLite export) stored it as a JSON string — handle both.
+  const parseBiltyIds = (val) => {
+    if (Array.isArray(val)) return val
+    try { return JSON.parse(val || '[]') } catch (_) { return [] }
+  }
+
   // Preview / Print saved statement from history
   const previewSavedStatement = (stmt) => {
-    let ids = []
-    try { ids = JSON.parse(stmt.bilty_ids || '[]') } catch (_) {}
+    const ids = parseBiltyIds(stmt.bilty_ids)
     const linkedBills = entries.filter(e => ids.includes(e.id))
       .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.lr_number || '').localeCompare(b.lr_number || ''))
 
@@ -368,8 +375,7 @@ export default function Statements() {
   }
 
   const downloadSavedStatementPdf = async (stmt) => {
-    let ids = []
-    try { ids = JSON.parse(stmt.bilty_ids || '[]') } catch (_) {}
+    const ids = parseBiltyIds(stmt.bilty_ids)
     const linkedBills = entries.filter(e => ids.includes(e.id))
       .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.lr_number || '').localeCompare(b.lr_number || ''))
 

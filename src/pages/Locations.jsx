@@ -16,7 +16,7 @@ export default function Locations() {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
-  const loadLocations = () => setLocations(getLocations())
+  const loadLocations = async () => setLocations(await getLocations())
   useEffect(() => { loadLocations() }, [])
 
   const filtered = locations.filter(l =>
@@ -31,15 +31,15 @@ export default function Locations() {
 
   const resetForm = () => { setForm(EMPTY); setEditId(null) }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) { showToast('Location name is required!', 'error'); return }
     try {
       if (editId) {
-        setLocations(updateLocation(editId, { name: form.name.trim(), state: form.state.trim() || 'Rajasthan' }))
+        setLocations(await updateLocation(editId, { name: form.name.trim(), state: form.state.trim() || 'Rajasthan' }))
         showToast('✓ Location updated!')
       } else {
-        setLocations(addLocation(form.name.trim(), form.state.trim() || 'Rajasthan'))
+        setLocations(await addLocation(form.name.trim(), form.state.trim() || 'Rajasthan'))
         showToast(`✓ Location '${form.name}' added!`)
       }
       resetForm()
@@ -52,9 +52,9 @@ export default function Locations() {
     document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const doDelete = () => {
+  const doDelete = async () => {
     try {
-      setLocations(deleteLocation(confirmDel.id))
+      setLocations(await deleteLocation(confirmDel.id))
       showToast('✓ Location deleted')
       if (editId === confirmDel.id) resetForm()
     } catch (err) { showToast('Error: ' + err.message, 'error') }

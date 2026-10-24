@@ -7,14 +7,15 @@ import { getLREntries, getCustomers, getVehicles } from '../db/database'
 const MAX_PER_GROUP = 5
 
 // Build a flat list of search hits across LR bills, customers and vehicles.
-// Each hit knows where clicking it should navigate.
-function searchAll(q) {
+// Filters an already-loaded dataset (fetched once from Supabase) so typing is
+// instant and does not hit the network on every keystroke.
+function searchAll(q, data) {
   const s = q.trim().toLowerCase()
   if (!s) return []
   const has = (...vals) => vals.some(v => String(v || '').toLowerCase().includes(s))
   const hits = []
 
-  getLREntries()
+  data.lrs
     .filter(e => has(e.lr_number, e.consignor, e.consignee, e.from_city, e.to_city))
     .slice(0, MAX_PER_GROUP)
     .forEach(e => hits.push({
@@ -24,7 +25,7 @@ function searchAll(q) {
       to: `/bilty/${encodeURIComponent(e.lr_number)}`,
     }))
 
-  getCustomers()
+  data.customers
     .filter(c => has(c.name, c.phone, c.city))
     .slice(0, MAX_PER_GROUP)
     .forEach(c => hits.push({
@@ -34,7 +35,7 @@ function searchAll(q) {
       to: '/customers',
     }))
 
-  getVehicles()
+  data.vehicles
     .filter(v => has(v.vehicle_number, v.model, v.vehicle_type))
     .slice(0, MAX_PER_GROUP)
     .forEach(v => hits.push({
@@ -51,9 +52,17 @@ export default function Header({ onLock }) {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [data, setData] = useState({ lrs: [], customers: [], vehicles: [] })
   const boxRef = useRef(null)
 
-  const results = query ? searchAll(query) : []
+  const results = query ? searchAll(query, data) : []
+
+  // Load the searchable datasets once from Supabase.
+  useEffect(() => {
+    Promise.all([getLREntries(), getCustomers(), getVehicles()])
+      .then(([lrs, customers, vehicles]) => setData({ lrs, customers, vehicles }))
+      .catch(() => { /* network/not signed in — search just stays empty */ })
+  }, [])
 
   // Close the dropdown when clicking outside the search box.
   useEffect(() => {

@@ -80,21 +80,23 @@ export default function Challans() {
   const [previewChallan, setPreviewChallan] = useState(null)
 
   const [refreshing, setRefreshing] = useState(false)
-  const loadAll = () => {
-    setChallans(getChallans())
-    setEntries(getLREntries())
-    setVehicles(getVehicles())
-    setDrivers(getDrivers())
-    setLocations(getLocations())
+  const loadAll = async () => {
+    const [ch, en, ve, dr, lo] = await Promise.all([
+      getChallans(), getLREntries(), getVehicles(), getDrivers(), getLocations(),
+    ])
+    setChallans(ch)
+    setEntries(en)
+    setVehicles(ve)
+    setDrivers(dr)
+    setLocations(lo)
   }
   useEffect(() => { loadAll() }, [])
 
-  // Hard refresh: re-read transport.db from disk, then reload this page's data
-  // from it — no window reload, so the app never logs out.
+  // Hard refresh: re-fetch this page's data from Supabase.
   const hardRefresh = async () => {
     if (refreshing) return
     setRefreshing(true)
-    try { await reloadDatabase(); loadAll() }
+    try { await reloadDatabase(); await loadAll() }
     finally { setRefreshing(false) }
   }
 
@@ -116,7 +118,7 @@ export default function Challans() {
     setEditId(null)
     setForm(emptyForm())
     setSelected(new Set())
-    setNextNo(peekNextChallanNumber())
+    peekNextChallanNumber().then(setNextNo)
     setPickSearch(''); setPickPay('all'); setPickDateRange(null)
     setView('form')
   }

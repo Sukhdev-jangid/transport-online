@@ -18,15 +18,14 @@ export default function ItemRates() {
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
   const [refreshing, setRefreshing] = useState(false)
-  const loadItems = () => setItems(getItemsMaster())
+  const loadItems = async () => setItems(await getItemsMaster())
   useEffect(() => { loadItems() }, [])
 
-  // Hard refresh: re-read transport.db from disk, then reload this page's data
-  // from it — no window reload, so the app never logs out.
+  // Hard refresh: re-fetch the item list from Supabase.
   const hardRefresh = async () => {
     if (refreshing) return
     setRefreshing(true)
-    try { await reloadDatabase(); loadItems() }
+    try { await reloadDatabase(); await loadItems() }
     finally { setRefreshing(false) }
   }
 

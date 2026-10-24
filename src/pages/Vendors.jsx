@@ -18,7 +18,7 @@ export default function Vendors() {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
-  const loadVendors = () => setVendors(getVendors())
+  const loadVendors = async () => setVendors(await getVendors())
   useEffect(() => { loadVendors() }, [])
 
   const showToast = (msg, type = 'success') => {
@@ -27,16 +27,16 @@ export default function Vendors() {
 
   const resetForm = () => { setForm(EMPTY); setEditId(null) }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) { showToast('Vendor name is required!', 'error'); return }
     if (!isValidPhone(form.phone)) { showToast('Phone must be exactly 10 digits!', 'error'); return }
     try {
       if (editId) {
-        setVendors(updateVendor(editId, form))
+        setVendors(await updateVendor(editId, form))
         showToast('✓ Vendor updated!')
       } else {
-        setVendors(addVendor(form))
+        setVendors(await addVendor(form))
         showToast('✓ Vendor saved!')
       }
       resetForm()
@@ -49,9 +49,9 @@ export default function Vendors() {
     document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const doDelete = () => {
+  const doDelete = async () => {
     try {
-      setVendors(deleteVendor(confirmDel.id))
+      setVendors(await deleteVendor(confirmDel.id))
       showToast('✓ Vendor deleted')
       if (editId === confirmDel.id) resetForm()
     } catch (err) { showToast('Error: ' + err.message, 'error') }

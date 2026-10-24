@@ -101,43 +101,52 @@ export default function LREntry() {
   }, [])
 
   useEffect(() => {
+    let active = true
     if (!editLrParam) {
       setEditId(null)
-      const nextNum = peekNextLRNumber()
-      setNextLR(nextNum)
-      setForm(f => ({ ...f, lrNumber: nextNum }))
-      return
+      peekNextLRNumber().then(nextNum => {
+        if (!active) return
+        setNextLR(nextNum)
+        setForm(f => ({ ...f, lrNumber: nextNum }))
+      })
+      return () => { active = false }
     }
-    const e = getLREntries().find(r => r.lr_number === editLrParam)
-    if (!e) { setEditId(null); return }
-    setEditId(e.id)
-    setForm({
-      lrNumber: e.lr_number,
-      date: e.date || today,
-      fromCity: e.from_city || '',
-      toCity: e.to_city || '',
-      consignor: e.consignor || '',
-      consignorPhone: e.consignor_phone || '',
-      consignorAddress: e.consignor_address || '',
-      consignorId: e.consignor_id ?? null,
-      consignee: e.consignee || '',
-      consigneePhone: e.consignee_phone || '',
-      consigneeAddress: e.consignee_address || '',
-      consigneeId: e.consignee_id ?? null,
-      paymentType: e.payment_type || 'ToPay',
-      advancePaid: e.advance_paid || 0,
-      bCharge: e.b_charge || 0,
-      hamali: e.hamali || 0,
-      pickup: e.pickup || 0,
-      delivery: e.delivery || 0,
-    })
-    const rows = getShipmentItems(e.id).map(it => ({
-      itemName: it.item_name,
-      quantity: it.quantity,
-      rate: it.rate,
-      totalAmount: it.total_amount,
-    }))
-    setItemsList(rows.length ? rows : [{ itemName: '', quantity: 1, rate: 0, totalAmount: 0 }])
+    ;(async () => {
+      const rows = await getLREntries()
+      const e = rows.find(r => r.lr_number === editLrParam)
+      if (!active) return
+      if (!e) { setEditId(null); return }
+      setEditId(e.id)
+      setForm({
+        lrNumber: e.lr_number,
+        date: e.date || today,
+        fromCity: e.from_city || '',
+        toCity: e.to_city || '',
+        consignor: e.consignor || '',
+        consignorPhone: e.consignor_phone || '',
+        consignorAddress: e.consignor_address || '',
+        consignorId: e.consignor_id ?? null,
+        consignee: e.consignee || '',
+        consigneePhone: e.consignee_phone || '',
+        consigneeAddress: e.consignee_address || '',
+        consigneeId: e.consignee_id ?? null,
+        paymentType: e.payment_type || 'ToPay',
+        advancePaid: e.advance_paid || 0,
+        bCharge: e.b_charge || 0,
+        hamali: e.hamali || 0,
+        pickup: e.pickup || 0,
+        delivery: e.delivery || 0,
+      })
+      const items = (await getShipmentItems(e.id)).map(it => ({
+        itemName: it.item_name,
+        quantity: it.quantity,
+        rate: it.rate,
+        totalAmount: it.total_amount,
+      }))
+      if (!active) return
+      setItemsList(items.length ? items : [{ itemName: '', quantity: 1, rate: 0, totalAmount: 0 }])
+    })()
+    return () => { active = false }
   }, [editLrParam])
 
   // Keyboard shortcut: Ctrl+S to save and print
@@ -159,13 +168,15 @@ export default function LREntry() {
     }
   }, [isEditing])
 
-  const loadData = () => {
-    const nextNum = peekNextLRNumber()
-    setEntries(getLREntries())
+  const loadData = async () => {
+    const [nextNum, lrs, locs, items, custs] = await Promise.all([
+      peekNextLRNumber(), getLREntries(), getLocations(), getItemsMaster(), getCustomers(),
+    ])
+    setEntries(lrs)
     setNextLR(nextNum)
-    setLocations(getLocations())
-    setItemsMaster(getItemsMaster())
-    setCustomers(getCustomers())
+    setLocations(locs)
+    setItemsMaster(items)
+    setCustomers(custs)
     if (!editLrParam) {
       setForm(f => ({ ...f, lrNumber: f.lrNumber || nextNum }))
     }
@@ -176,8 +187,8 @@ export default function LREntry() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const resetBookingForm = (autoFocus = true) => {
-    const nextNum = peekNextLRNumber()
+  const resetBookingForm = async (autoFocus = true) => {
+    const nextNum = await peekNextLRNumber()
     setNextLR(nextNum)
     setForm({
       lrNumber: nextNum,
@@ -318,10 +329,10 @@ export default function LREntry() {
   const balanceDue = Math.max(0, grandTotal - advancePaidNum)
 
   // Handle Add New City Inline
-  const handleCreateCity = (e) => {
+  const handleCreateCity = async (e) => {
     e.preventDefault()
     if (!newCityName.trim()) return
-    const updated = addLocation(newCityName.trim())
+    const updated = await addLocation(newCityName.trim())
     setLocations(updated)
     if (!form.fromCity) {
       setForm(f => ({ ...f, fromCity: newCityName.trim() }))
@@ -448,7 +459,7 @@ export default function LREntry() {
 
       // Refresh customers state if any new party was created
       if (consignorRes.wasCreated || consigneeRes.wasCreated) {
-        setCustomers(getCustomers())
+        setCustomers(await getCustomers())
       }
 
       const charges = {
@@ -471,7 +482,7 @@ export default function LREntry() {
       }
 
       if (isEditing && editId) {
-        updateLREntryWithItems(editId, lrPayload)
+        await updateLREntryWithItems(editId, lrPayload)
         showToast(`✓ LR ${editLrParam} updated successfully!`)
         setTimeout(() => navigate(`/bilty/${encodeURIComponent(editLrParam)}`, { replace: true }), 500)
         return
@@ -501,8 +512,8 @@ export default function LREntry() {
 
       document.activeElement?.blur()
       setActiveBilty(newlySavedData)
-      setEntries(getLREntries())
-      setNextLR(peekNextLRNumber())
+      setEntries(await getLREntries())
+      setNextLR(await peekNextLRNumber())
       resetBookingForm(false)
     } catch (err) {
       // Save failed: the bill was rolled back and is NOT on disk. Make this
@@ -1401,34 +1412,37 @@ export default function LREntry() {
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => setActiveBilty({
-                            lrNumber: e.lr_number,
-                            date: e.date,
-                            fromCity: e.from_city,
-                            toCity: e.to_city,
-                            consignor: e.consignor,
-                            consignorPhone: e.consignor_phone,
-                            consignorAddress: e.consignor_address,
-                            consignee: e.consignee,
-                            consigneePhone: e.consignee_phone,
-                            consigneeAddress: e.consignee_address,
-                            items: e.items,
-                            freight: e.freight,
-                            bCharge: e.b_charge,
-                            hamali: e.hamali,
-                            pickup: e.pickup,
-                            delivery: e.delivery,
-                            totalAmount: e.total_amount,
-                            advancePaid: e.advance_paid,
-                            balanceDue: e.balance_due,
-                            paymentType: e.payment_type,
-                            itemsList: getShipmentItems(e.id).map(it => ({
-                              itemName: it.item_name,
-                              quantity: it.quantity,
-                              rate: it.rate,
-                              totalAmount: it.total_amount,
-                            })),
-                          })}
+                          onClick={async () => {
+                            const shipmentItems = await getShipmentItems(e.id)
+                            setActiveBilty({
+                              lrNumber: e.lr_number,
+                              date: e.date,
+                              fromCity: e.from_city,
+                              toCity: e.to_city,
+                              consignor: e.consignor,
+                              consignorPhone: e.consignor_phone,
+                              consignorAddress: e.consignor_address,
+                              consignee: e.consignee,
+                              consigneePhone: e.consignee_phone,
+                              consigneeAddress: e.consignee_address,
+                              items: e.items,
+                              freight: e.freight,
+                              bCharge: e.b_charge,
+                              hamali: e.hamali,
+                              pickup: e.pickup,
+                              delivery: e.delivery,
+                              totalAmount: e.total_amount,
+                              advancePaid: e.advance_paid,
+                              balanceDue: e.balance_due,
+                              paymentType: e.payment_type,
+                              itemsList: shipmentItems.map(it => ({
+                                itemName: it.item_name,
+                                quantity: it.quantity,
+                                rate: it.rate,
+                                totalAmount: it.total_amount,
+                              })),
+                            })
+                          }}
                           className="p-1.5 rounded text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
                           title="Print Bilty"
                         >

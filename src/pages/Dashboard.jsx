@@ -30,8 +30,8 @@ export default function Dashboard() {
   const [recentLR, setRecentLR] = useState([])
 
   useEffect(() => {
-    setStats(getDashboardStats())
-    setRecentLR(getLREntries().slice(0, 10))
+    getDashboardStats().then(setStats)
+    getLREntries().then(rows => setRecentLR(rows.slice(0, 10)))
   }, [])
 
   const quickActions = [

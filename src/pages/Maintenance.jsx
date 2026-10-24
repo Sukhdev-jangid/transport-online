@@ -23,12 +23,13 @@ export default function Maintenance() {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
-  const loadLogs = () => setLogs(getMaintenanceLogs())
+  const loadLogs = async () => setLogs(await getMaintenanceLogs())
   useEffect(() => {
     loadLogs()
-    const v = getVehicles()
-    setVehicles(v)
-    setForm(f => ({ ...f, vehicleNumber: v[0]?.vehicle_number || '' }))
+    getVehicles().then(v => {
+      setVehicles(v)
+      setForm(f => ({ ...f, vehicleNumber: v[0]?.vehicle_number || '' }))
+    })
   }, [])
 
   const filtered = logs.filter(l =>
@@ -42,12 +43,12 @@ export default function Maintenance() {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3000)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.vehicleNumber) { showToast('Select a vehicle first!', 'error'); return }
     if (!form.serviceType.trim()) { showToast('Please type the service type!', 'error'); return }
     try {
-      setLogs(addMaintenanceLog(form))
+      setLogs(await addMaintenanceLog(form))
       showToast('✓ Maintenance log saved!')
       setTypeIsOther(false)
       setForm(f => ({ ...f, serviceType: 'General Service', cost: '', odometer: '', nextServiceDate: '', notes: '' }))

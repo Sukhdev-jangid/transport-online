@@ -66,6 +66,7 @@
   "author": "Transport Co.",
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.525.0",

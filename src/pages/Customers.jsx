@@ -25,15 +25,14 @@ export default function Customers() {
   const [dateRange, setDateRange] = useState(null)   // { from, to, label } | null
 
   const [refreshing, setRefreshing] = useState(false)
-  const loadCustomers = () => setCustomers(getCustomers())
+  const loadCustomers = async () => setCustomers(await getCustomers())
   useEffect(() => { loadCustomers() }, [])
 
-  // Hard refresh: re-read transport.db from disk, then reload this page's data
-  // from it — no window reload, so the app never logs out.
+  // Hard refresh: re-fetch the customer list from Supabase.
   const hardRefresh = async () => {
     if (refreshing) return
     setRefreshing(true)
-    try { await reloadDatabase(); loadCustomers() }
+    try { await reloadDatabase(); await loadCustomers() }
     finally { setRefreshing(false) }
   }
 

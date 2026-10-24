@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Printer, X, MessageCircle, Download, Loader2, Zap, Check, AlertCircle } from 'lucide-react'
 import { COMPANY } from '../config/company'
@@ -32,8 +32,16 @@ export default function BiltyInvoiceModal({ lrData, onClose }) {
   const [busy, setBusy] = useState(null)   // status text while a print/PDF job runs
   const [feedback, setFeedback] = useState(null) // { type: 'success' | 'error', message: string }
 
-  const printerSettings = getPrinterSettings()
-  const [copies, setCopies] = useState(printerSettings.defaultCopies || 1)
+  // Printer settings now come from Supabase (async). Default to safe values,
+  // then fill in once loaded.
+  const [printerSettings, setPrinterSettings] = useState({ defaultCopies: 1, directPrintEnabled: true, selectedPrinter: '' })
+  const [copies, setCopies] = useState(1)
+  useEffect(() => {
+    getPrinterSettings().then(s => {
+      setPrinterSettings(s)
+      setCopies(s.defaultCopies || 1)
+    }).catch(() => { /* keep defaults */ })
+  }, [])
   const isDirectPrintEnabled = printerSettings.directPrintEnabled !== false && Boolean(window.electronAPI?.directPrintBilty)
 
   const cleanSelectedPrinter = (printerSettings.selectedPrinter || '').replace(/onenote|fax|xps/i, '').trim()

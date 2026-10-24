@@ -19,23 +19,35 @@ import Locations from './pages/Locations'
 import Vendors from './pages/Vendors'
 import CompanySettings from './pages/CompanySettings'
 import Login from './pages/Login'
-import { initDatabase, isPasswordSet } from './db/database'
+import { initDatabase } from './db/database'
+import { getSession, onAuthChange, signOut } from './db/auth'
 
 export default function App() {
   const location = useLocation()
   const [dbReady, setDbReady] = useState(false)
   const [error, setError] = useState(null)
   const [saveError, setSaveError] = useState(null)
-  const [needsSetup, setNeedsSetup] = useState(false)   // true on first run (no password yet)
-  const [unlocked, setUnlocked] = useState(false)       // true once the correct password is entered
+  const [authReady, setAuthReady] = useState(false)    // true once the session is resolved
+  const [unlocked, setUnlocked] = useState(false)      // true while a Supabase session is active
 
   useEffect(() => {
     initDatabase()
-      .then(() => {
-        setNeedsSetup(!isPasswordSet())
-        setDbReady(true)
-      })
+      .then(() => setDbReady(true))
       .catch(err => setError(err.message))
+  }, [])
+
+  // Resolve the Supabase session on load and keep it in sync with login/logout
+  // (including token refresh and sign-out from another tab/window).
+  useEffect(() => {
+    let unsub
+    getSession()
+      .then(session => {
+        setUnlocked(!!session)
+        setAuthReady(true)
+      })
+      .catch(() => setAuthReady(true))
+    unsub = onAuthChange(session => setUnlocked(!!session))
+    return () => { if (unsub) unsub() }
   }, [])
 
   // A persistent warning if any DB save fails (e.g. disk full or the file was
@@ -55,7 +67,7 @@ export default function App() {
     </div>
   )
 
-  if (!dbReady) return (
+  if (!dbReady || !authReady) return (
     <div className="flex flex-col items-center justify-center h-screen gap-4 font-sans bg-white">
       <div className="spinner" />
       <div className="text-slate-500 text-sm font-medium">
@@ -64,13 +76,13 @@ export default function App() {
     </div>
   )
 
-  // Gate the whole app behind the password (set it on first run).
+  // Gate the whole app behind a Supabase login (email + password).
   if (!unlocked) return (
-    <Login needsSetup={needsSetup} onUnlock={() => setUnlocked(true)} />
+    <Login onUnlock={() => setUnlocked(true)} />
   )
 
   return (
-    <Layout onLock={() => setUnlocked(false)}>
+    <Layout onLock={() => signOut()}>
       {saveError && (
         <div className="fixed top-0 left-0 right-0 z-[10000] bg-red-600 text-white px-4 py-2.5 text-xs font-semibold flex items-center justify-between shadow-lg">
           <span className="flex items-center gap-1.5">

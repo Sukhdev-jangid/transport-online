@@ -20,10 +20,10 @@ export default function AllDrivers() {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
-  const loadDrivers = () => setDrivers(getDrivers())
+  const loadDrivers = async () => setDrivers(await getDrivers())
   useEffect(() => {
     loadDrivers()
-    setVehicles(getVehicles())
+    getVehicles().then(setVehicles)
   }, [])
 
   const filtered = drivers.filter(d =>
@@ -38,16 +38,16 @@ export default function AllDrivers() {
 
   const resetForm = () => { setForm(emptyForm); setEditId(null) }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) { showToast('Driver name is required!', 'error'); return }
     if (!isValidPhone(form.phone)) { showToast('Phone must be exactly 10 digits!', 'error'); return }
     try {
       if (editId) {
-        setDrivers(updateDriver(editId, form))
+        setDrivers(await updateDriver(editId, form))
         showToast('✓ Driver updated!')
       } else {
-        setDrivers(addDriver(form))
+        setDrivers(await addDriver(form))
         showToast('✓ Driver added!')
       }
       resetForm()
@@ -60,9 +60,9 @@ export default function AllDrivers() {
     document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     try {
-      setDrivers(deleteDriver(id))
+      setDrivers(await deleteDriver(id))
       showToast('✓ Driver deleted!')
       if (editId === id) resetForm()
     } catch (err) { showToast('Error: ' + err.message, 'error') }
