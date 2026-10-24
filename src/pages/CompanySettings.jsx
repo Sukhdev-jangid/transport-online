@@ -1,22 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Save, RotateCcw, Upload, Trash2, Building2, Eye, Database, FolderOpen, HardDriveDownload, HardDriveUpload, Lock, X, Hash, Plus, Printer, Zap } from 'lucide-react'
+import { Save, RotateCcw, Upload, Trash2, Building2, Eye, Lock, X, Hash, Plus, Printer, Zap } from 'lucide-react'
 import { getCompanySettings, saveCompanySettings, getLRNumberSettings, saveLRNumberSettings, peekNextLRNumber, getCurrentMaxLRNumber, getPrinterSettings, savePrinterSettings } from '../db/database'
 import { changePassword } from '../db/auth'
 import { COMPANY, COMPANY_DEFAULTS } from '../config/company'
 import BiltyDocument from '../components/BiltyDocument'
 import A5Page from '../components/A5Page'
-
-const fmtSize = (b) => (b > 1024 * 1024 ? (b / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB')
-const p2 = (n) => String(n).padStart(2, '0')
-// Backup timestamps arrive as epoch ms; show them as dd-mm-yyyy hh:mm AM/PM.
-const fmtDate = (ms) => {
-  const d = new Date(ms)
-  if (isNaN(d)) return ''
-  let h = d.getHours()
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  h = h % 12 || 12
-  return `${p2(d.getDate())}-${p2(d.getMonth() + 1)}-${d.getFullYear()} ${p2(h)}:${p2(d.getMinutes())} ${ampm}`
-}
 
 // Turn the live COMPANY object into editable form state (phones as text).
 const toForm = (src) => ({
@@ -77,8 +65,6 @@ export default function CompanySettings() {
     setPreviewClosing(true)
     setTimeout(() => { setPreview(false); setPreviewClosing(false) }, 260)
   }
-  const [backups, setBackups] = useState([])
-  const [confirmRestore, setConfirmRestore] = useState(false)
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
   const [pwBusy, setPwBusy] = useState(false)
   const [lrForm, setLrForm] = useState({ startNumber: 1 })
@@ -114,38 +100,8 @@ export default function CompanySettings() {
         setPrinters(physical)
       }).catch(() => {})
     }
-    refreshBackups()
     return () => { active = false }
   }, [])
-
-  const refreshBackups = async () => {
-    if (!window.electronAPI?.listBackups) return
-    try { setBackups(await window.electronAPI.listBackups()) } catch (e) { /* ignore */ }
-  }
-
-  const handleBackupNow = async () => {
-    if (!window.electronAPI?.backupNow) { showToast('Backup only works in the desktop app.', 'error'); return }
-    const dest = await window.electronAPI.backupNow()
-    if (dest) { showToast('✓ Backup saved to TransportBackups folder!'); refreshBackups() }
-    else showToast('Could not create backup.', 'error')
-  }
-
-  const handleOpenFolder = async () => {
-    if (!window.electronAPI?.openBackupFolder) { showToast('Only available in the desktop app.', 'error'); return }
-    await window.electronAPI.openBackupFolder()
-  }
-
-  const handleRestore = async () => {
-    setConfirmRestore(false)
-    if (!window.electronAPI?.restoreBackup) { showToast('Only available in the desktop app.', 'error'); return }
-    const ok = await window.electronAPI.restoreBackup()
-    if (ok) {
-      showToast('✓ Backup restored! Reloading…')
-      setTimeout(() => window.location.reload(), 1200)
-    } else {
-      showToast('Restore cancelled.', 'error')
-    }
-  }
 
   const handleChangePassword = async (e) => {
     e.preventDefault()
@@ -441,47 +397,6 @@ export default function CompanySettings() {
         </div>
       </form>
 
-      {/* Backup & Restore */}
-      <div className="card mb-6">
-        <div className="card-header"><span className="card-title"><Database size={15} /> Backup &amp; Restore</span></div>
-        <div className="p-5">
-          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800 mb-4">
-            Your entire data (bills, customers, vehicles, settings) lives in one file. A backup is made
-            automatically once a day into your <b>Documents → TransportBackups</b> folder. To keep it safe off this
-            computer, open that folder and upload the latest file to Google Drive manually.
-          </div>
-
-          <div className="flex flex-wrap gap-2 mb-5">
-            <button type="button" className="btn btn-primary" onClick={handleBackupNow}>
-              <HardDriveDownload size={14} /> Backup Now
-            </button>
-            <button type="button" className="btn btn-outline" onClick={handleOpenFolder}>
-              <FolderOpen size={14} /> Open Backup Folder
-            </button>
-            <button type="button" className="btn btn-outline text-amber-700 border-amber-200 hover:bg-amber-50"
-              onClick={() => setConfirmRestore(true)}>
-              <HardDriveUpload size={14} /> Restore from Backup
-            </button>
-          </div>
-
-          <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">
-            Recent backups {backups.length ? `(${backups.length})` : ''}
-          </div>
-          {backups.length === 0 ? (
-            <p className="text-xs text-slate-400">No backups yet. Click “Backup Now” to create the first one.</p>
-          ) : (
-            <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-56 overflow-y-auto">
-              {backups.map(b => (
-                <div key={b.name} className="flex items-center justify-between px-3 py-2 text-xs">
-                  <span className="font-mono text-slate-700 truncate">{b.name}</span>
-                  <span className="text-slate-400 whitespace-nowrap ml-3">{fmtDate(b.mtime)} · {fmtSize(b.size)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Bill content — logo, name, contact, legal text shown on every Bilty */}
       <form onSubmit={handleSave}>
         <div className="card mb-4">
@@ -666,25 +581,6 @@ export default function CompanySettings() {
               <A5Page>
                 <BiltyDocument key={previewTick} lrData={SAMPLE_LR} id="settingsPreview" />
               </A5Page>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Restore confirm */}
-      {confirmRestore && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setConfirmRestore(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-5 w-96" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-bold text-slate-900 mb-1">Restore from a backup?</h3>
-            <p className="text-xs text-slate-500 mb-4">
-              This will <b>replace all current data</b> with the backup file you choose. A safety backup of the
-              current data is made first. The app will reload after restoring.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmRestore(false)} className="btn btn-outline">Cancel</button>
-              <button onClick={handleRestore} className="btn bg-amber-600 text-white hover:bg-amber-700">
-                Choose File &amp; Restore
-              </button>
             </div>
           </div>
         </div>

@@ -8,7 +8,8 @@ import './index.css'
 // protocol, where BrowserRouter can't match routes (the pathname is the .html
 // file path) and clicking links navigates to non-existent files. HashRouter
 // uses #/route which works under file:// and on the dev server alike.
-// sql.js is bundled locally (see src/db/database.js) so the app is fully offline.
+// All data lives in Supabase (see src/db/database.js) — the app needs a network
+// connection to read and write.
 ReactDOM.createRoot(document.getElementById('root')).render(
   <HashRouter>
     <App />
