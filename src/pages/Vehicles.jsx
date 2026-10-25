@@ -23,6 +23,8 @@ export default function Vehicles() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
+  const [saving, setSaving] = useState(false)     // blocks double-submit while a save is in flight
+  const [deleting, setDeleting] = useState(false)  // blocks double-click on delete
 
   const loadVehicles = async () => setVehicles(await getVehicles())
   useEffect(() => { loadVehicles() }, [])
@@ -42,8 +44,10 @@ export default function Vehicles() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return                       // ignore repeat clicks while saving
     if (!form.vehicleNumber.trim()) { showToast('Vehicle number is required!', 'error'); return }
     if (!form.vehicleType.trim()) { showToast('Please type the vehicle type!', 'error'); return }
+    setSaving(true)
     try {
       if (editId) {
         setVehicles(await updateVehicle(editId, form))
@@ -53,7 +57,7 @@ export default function Vehicles() {
         showToast('✓ Vehicle saved successfully!')
       }
       resetForm()
-    } catch (err) { showToast('Error: ' + err.message, 'error') }
+    } catch (err) { showToast('Error: ' + err.message, 'error') } finally { setSaving(false) }
   }
 
   const handleEdit = (v) => {
@@ -74,12 +78,14 @@ export default function Vehicles() {
   }
 
   const handleDelete = async (id) => {
+    if (deleting) return
+    setDeleting(true)
     try {
       setVehicles(await deleteVehicle(id))
       showToast('✓ Vehicle deleted!')
       if (editId === id) resetForm()
-    } catch (err) { showToast('Error: ' + err.message, 'error') }
-    setConfirmId(null)
+      setConfirmId(null)
+    } catch (err) { showToast('Error: ' + err.message, 'error') } finally { setDeleting(false) }
   }
 
   return (
@@ -164,8 +170,8 @@ export default function Vehicles() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary">{editId ? 'Update Vehicle' : 'Save Vehicle'}</button>
-            <button type="button" className="btn btn-outline" onClick={resetForm}>Reset</button>
+            <button type="submit" className="btn btn-primary disabled:opacity-60 disabled:cursor-wait" disabled={saving}>{saving ? 'Saving…' : (editId ? 'Update Vehicle' : 'Save Vehicle')}</button>
+            <button type="button" className="btn btn-outline" onClick={resetForm} disabled={saving}>Reset</button>
           </div>
         </form>
       </div>
@@ -253,8 +259,8 @@ export default function Vehicles() {
             <h3 className="text-sm font-bold text-slate-900 mb-1">Delete vehicle?</h3>
             <p className="text-xs text-slate-500 mb-4">This vehicle will be permanently deleted. This cannot be undone.</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmId(null)} className="btn btn-outline">Cancel</button>
-              <button onClick={() => handleDelete(confirmId)} className="btn bg-red-600 text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmId(null)} className="btn btn-outline" disabled={deleting}>Cancel</button>
+              <button onClick={() => handleDelete(confirmId)} disabled={deleting} className="btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait">{deleting ? 'Deleting…' : 'Delete'}</button>
             </div>
           </div>
         </div>

@@ -22,6 +22,7 @@ export default function Maintenance() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
+  const [saving, setSaving] = useState(false)     // blocks double-submit while a save is in flight
 
   const loadLogs = async () => setLogs(await getMaintenanceLogs())
   useEffect(() => {
@@ -45,14 +46,16 @@ export default function Maintenance() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return                       // ignore repeat clicks while saving
     if (!form.vehicleNumber) { showToast('Select a vehicle first!', 'error'); return }
     if (!form.serviceType.trim()) { showToast('Please type the service type!', 'error'); return }
+    setSaving(true)
     try {
       setLogs(await addMaintenanceLog(form))
       showToast('✓ Maintenance log saved!')
       setTypeIsOther(false)
       setForm(f => ({ ...f, serviceType: 'General Service', cost: '', odometer: '', nextServiceDate: '', notes: '' }))
-    } catch (err) { showToast('Error: ' + err.message, 'error') }
+    } catch (err) { showToast('Error: ' + err.message, 'error') } finally { setSaving(false) }
   }
 
   const totalCost = logs.reduce((s, l) => s + (Number(l.cost) || 0), 0)
@@ -126,7 +129,9 @@ export default function Maintenance() {
                 value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
           </div>
-          <button type="submit" className="btn btn-primary">Save Log</button>
+          <button type="submit" className="btn btn-primary disabled:opacity-60 disabled:cursor-wait" disabled={saving}>
+            {saving ? 'Saving…' : 'Save Log'}
+          </button>
         </form>
       </div>
 

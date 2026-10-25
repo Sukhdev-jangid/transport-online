@@ -19,6 +19,8 @@ export default function AllDrivers() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
+  const [saving, setSaving] = useState(false)     // blocks double-submit while a save is in flight
+  const [deleting, setDeleting] = useState(false)  // blocks double-click on delete
 
   const loadDrivers = async () => setDrivers(await getDrivers())
   useEffect(() => {
@@ -40,8 +42,10 @@ export default function AllDrivers() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return                       // ignore repeat clicks while saving
     if (!form.name.trim()) { showToast('Driver name is required!', 'error'); return }
     if (!isValidPhone(form.phone)) { showToast('Phone must be exactly 10 digits!', 'error'); return }
+    setSaving(true)
     try {
       if (editId) {
         setDrivers(await updateDriver(editId, form))
@@ -51,7 +55,7 @@ export default function AllDrivers() {
         showToast('✓ Driver added!')
       }
       resetForm()
-    } catch (err) { showToast('Error: ' + err.message, 'error') }
+    } catch (err) { showToast('Error: ' + err.message, 'error') } finally { setSaving(false) }
   }
 
   const handleEdit = (d) => {
@@ -61,12 +65,14 @@ export default function AllDrivers() {
   }
 
   const handleDelete = async (id) => {
+    if (deleting) return
+    setDeleting(true)
     try {
       setDrivers(await deleteDriver(id))
       showToast('✓ Driver deleted!')
       if (editId === id) resetForm()
-    } catch (err) { showToast('Error: ' + err.message, 'error') }
-    setConfirmId(null)
+      setConfirmId(null)
+    } catch (err) { showToast('Error: ' + err.message, 'error') } finally { setDeleting(false) }
   }
 
   const handleCopy = async (d) => {
@@ -127,8 +133,8 @@ export default function AllDrivers() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary">{editId ? 'Update Driver' : 'Save Driver'}</button>
-            <button type="button" className="btn btn-outline" onClick={resetForm}>Reset</button>
+            <button type="submit" className="btn btn-primary disabled:opacity-60 disabled:cursor-wait" disabled={saving}>{saving ? 'Saving…' : (editId ? 'Update Driver' : 'Save Driver')}</button>
+            <button type="button" className="btn btn-outline" onClick={resetForm} disabled={saving}>Reset</button>
           </div>
         </form>
       </div>
@@ -221,8 +227,8 @@ export default function AllDrivers() {
             <h3 className="text-sm font-bold text-slate-900 mb-1">Delete driver?</h3>
             <p className="text-xs text-slate-500 mb-4">This driver will be permanently deleted. This cannot be undone.</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmId(null)} className="btn btn-outline">Cancel</button>
-              <button onClick={() => handleDelete(confirmId)} className="btn bg-red-600 text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmId(null)} className="btn btn-outline" disabled={deleting}>Cancel</button>
+              <button onClick={() => handleDelete(confirmId)} disabled={deleting} className="btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait">{deleting ? 'Deleting…' : 'Delete'}</button>
             </div>
           </div>
         </div>

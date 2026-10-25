@@ -18,6 +18,8 @@ export default function ItemRates() {
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
   const [refreshing, setRefreshing] = useState(false)
+  const [saving, setSaving] = useState(false)     // blocks double-submit while a save is in flight
+  const [deleting, setDeleting] = useState(false)  // blocks double-click on delete
   const loadItems = async () => setItems(await getItemsMaster())
   useEffect(() => { loadItems() }, [])
 
@@ -52,6 +54,8 @@ export default function ItemRates() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return                       // ignore repeat clicks while saving
+    setSaving(true)
     try {
       const payload = {
         itemName: form.itemName,
@@ -73,6 +77,8 @@ export default function ItemRates() {
     } catch (err) {
       playSound(false)
       showToast('✗ ITEM NOT SAVED! Disk error: ' + err.message + ' — try again.', 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -88,15 +94,19 @@ export default function ItemRates() {
   }
 
   const doDelete = async () => {
+    if (deleting) return
+    setDeleting(true)
     try {
       setItems(await deleteItemMaster(confirmDel.id))
       showToast('✓ Item deleted')
       if (editId === confirmDel.id) resetForm()
+      setConfirmDel(null)
     } catch (err) {
       playSound(false)
       showToast('✗ NOT DELETED — disk error: ' + err.message, 'error')
+    } finally {
+      setDeleting(false)
     }
-    setConfirmDel(null)
   }
 
   return (
@@ -150,8 +160,10 @@ export default function ItemRates() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary">{editId ? 'Update Item Rate' : 'Save Item Rate'}</button>
-            <button type="button" className="btn btn-outline" onClick={resetForm}>Reset</button>
+            <button type="submit" className="btn btn-primary disabled:opacity-60 disabled:cursor-wait" disabled={saving}>
+              {saving ? 'Saving…' : (editId ? 'Update Item Rate' : 'Save Item Rate')}
+            </button>
+            <button type="button" className="btn btn-outline" onClick={resetForm} disabled={saving}>Reset</button>
           </div>
         </form>
       </div>
@@ -281,8 +293,8 @@ export default function ItemRates() {
               "<span className="font-semibold text-slate-700">{confirmDel.item_name}</span>" will be permanently deleted. This cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDel(null)} className="btn btn-outline py-1 px-3">Cancel</button>
-              <button onClick={doDelete} className="btn py-1 px-3 bg-red-600 text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmDel(null)} className="btn btn-outline py-1 px-3" disabled={deleting}>Cancel</button>
+              <button onClick={doDelete} disabled={deleting} className="btn py-1 px-3 bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait">{deleting ? 'Deleting…' : 'Delete'}</button>
             </div>
           </div>
         </div>

@@ -81,6 +81,8 @@ export default function Statements() {
   const [rowsPerPage, setRowsPerPage] = useState(20)
 
   const [refreshing, setRefreshing] = useState(false)
+  const [saving, setSaving] = useState(false)      // blocks double-submit on statement save
+  const [deleting, setDeleting] = useState(false)  // blocks double-click on delete
   const [allCustomers, setAllCustomers] = useState([])
   const loadData = async () => {
     const [lrs, stmts, custs] = await Promise.all([
@@ -285,10 +287,12 @@ export default function Statements() {
 
   // Save statement to database
   const handleSaveStatement = async () => {
+    if (saving) return
     if (selectedBills.length === 0) {
       showToast('Select at least one bilty to generate statement.', 'error')
       return
     }
+    setSaving(true)
     try {
       // await: addStatement persists to disk and throws on failure. On a disk
       // error the statement row is rolled back and we fall into catch, so we
@@ -310,6 +314,8 @@ export default function Statements() {
     } catch (err) {
       playSound(false)
       showToast('✗ STATEMENT NOT SAVED! Disk error: ' + err.message + ' — try again.', 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -388,6 +394,8 @@ export default function Statements() {
   }
 
   const handleDeleteSaved = async (id) => {
+    if (deleting) return
+    setDeleting(true)
     try {
       await deleteStatement(id)
       showToast('Statement deleted successfully.')
@@ -396,6 +404,8 @@ export default function Statements() {
     } catch (err) {
       playSound(false)
       showToast('✗ NOT DELETED — disk error: ' + err.message, 'error')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -546,11 +556,11 @@ export default function Statements() {
               <div className="pt-3 border-t border-slate-100 space-y-2">
                 <button
                   onClick={handleSaveStatement}
-                  disabled={selectedBills.length === 0}
-                  className="btn btn-primary w-full justify-center text-xs py-2 disabled:opacity-50"
+                  disabled={selectedBills.length === 0 || saving}
+                  className="btn btn-primary w-full justify-center text-xs py-2 disabled:opacity-50 disabled:cursor-wait"
                   title="Save Statement (Ctrl+S or Ctrl+Enter)"
                 >
-                  <CheckCircle2 size={14} /> Save Statement (Ctrl+S)
+                  <CheckCircle2 size={14} /> {saving ? 'Saving…' : 'Save Statement (Ctrl+S)'}
                 </button>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -808,8 +818,8 @@ export default function Statements() {
             <h3 className="text-sm font-bold text-slate-900 mb-1">Delete statement?</h3>
             <p className="text-xs text-slate-500 mb-4">This statement record will be permanently deleted. Linked bilties will not be affected.</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmId(null)} className="btn btn-outline">Cancel</button>
-              <button onClick={() => handleDeleteSaved(confirmId)} className="btn bg-red-600 text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmId(null)} className="btn btn-outline" disabled={deleting}>Cancel</button>
+              <button onClick={() => handleDeleteSaved(confirmId)} disabled={deleting} className="btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait">{deleting ? 'Deleting…' : 'Delete'}</button>
             </div>
           </div>
         </div>

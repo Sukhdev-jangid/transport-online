@@ -80,6 +80,8 @@ export default function Challans() {
   const [previewChallan, setPreviewChallan] = useState(null)
 
   const [refreshing, setRefreshing] = useState(false)
+  const [saving, setSaving] = useState(false)      // blocks double-submit on challan save
+  const [deleting, setDeleting] = useState(false)  // blocks double-click on delete
   const loadAll = async () => {
     const [ch, en, ve, dr, lo] = await Promise.all([
       getChallans(), getLREntries(), getVehicles(), getDrivers(), getLocations(),
@@ -197,6 +199,7 @@ export default function Challans() {
   }
 
   const handleSave = async () => {
+    if (saving) return
     if (!form.manifestDate) {
       showToast('Please select a Manifest Date.', 'error')
       return
@@ -224,6 +227,7 @@ export default function Challans() {
     // Preserve the order bilties appear in the master list (newest→oldest id).
     const lrIds = entries.filter(e => selected.has(e.id)).map(e => e.id)
     const payload = { ...form, lrIds }
+    setSaving(true)
     try {
       // await: these persist to disk and throw on failure. On a disk error the
       // challan is rolled back (not saved) and we fall into catch — so we never
@@ -241,18 +245,24 @@ export default function Challans() {
     } catch (err) {
       playSound(false)
       showToast('✗ CHALLAN NOT SAVED! Disk error: ' + err.message + ' — try again.', 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleDelete = async (id) => {
+    if (deleting) return
+    setDeleting(true)
     try {
       setChallans(await deleteChallan(id))
       showToast('✓ Challan deleted!')
+      setConfirmId(null)
     } catch (err) {
       playSound(false)
       showToast('✗ NOT DELETED — disk error: ' + err.message, 'error')
+    } finally {
+      setDeleting(false)
     }
-    setConfirmId(null)
   }
 
   // ── Challan PDF actions ──
@@ -323,9 +333,9 @@ export default function Challans() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={backToList} className="btn btn-outline">Cancel</button>
-            <button onClick={handleSave} className="btn btn-primary">
-              {editId ? 'Update Challan (Ctrl+S)' : 'Create Challan (Ctrl+S)'}
+            <button onClick={backToList} className="btn btn-outline" disabled={saving}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="btn btn-primary disabled:opacity-60 disabled:cursor-wait">
+              {saving ? 'Saving…' : (editId ? 'Update Challan (Ctrl+S)' : 'Create Challan (Ctrl+S)')}
             </button>
           </div>
         </div>
@@ -482,7 +492,7 @@ export default function Challans() {
         </div>
 
         <div className="flex gap-2">
-          <button onClick={handleSave} className="btn btn-primary">{editId ? 'Update Challan (Ctrl+S)' : 'Create Challan (Ctrl+S)'}</button>
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary disabled:opacity-60 disabled:cursor-wait">{saving ? 'Saving…' : (editId ? 'Update Challan (Ctrl+S)' : 'Create Challan (Ctrl+S)')}</button>
           <button onClick={backToList} className="btn btn-outline">Cancel</button>
         </div>
 
@@ -601,8 +611,8 @@ export default function Challans() {
             <h3 className="text-sm font-bold text-slate-900 mb-1">Delete challan?</h3>
             <p className="text-xs text-slate-500 mb-4">This challan will be permanently deleted. The bilties themselves are not affected.</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmId(null)} className="btn btn-outline">Cancel</button>
-              <button onClick={() => handleDelete(confirmId)} className="btn bg-red-600 text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmId(null)} className="btn btn-outline" disabled={deleting}>Cancel</button>
+              <button onClick={() => handleDelete(confirmId)} disabled={deleting} className="btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait">{deleting ? 'Deleting…' : 'Delete'}</button>
             </div>
           </div>
         </div>

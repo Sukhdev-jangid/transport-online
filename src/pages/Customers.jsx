@@ -25,6 +25,8 @@ export default function Customers() {
   const [dateRange, setDateRange] = useState(null)   // { from, to, label } | null
 
   const [refreshing, setRefreshing] = useState(false)
+  const [saving, setSaving] = useState(false)     // blocks double-submit while a save is in flight
+  const [deleting, setDeleting] = useState(false)  // blocks double-click on delete
   const loadCustomers = async () => setCustomers(await getCustomers())
   useEffect(() => { loadCustomers() }, [])
 
@@ -44,7 +46,9 @@ export default function Customers() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return                       // ignore repeat clicks while saving
     if (!isValidPhone(form.phone)) { showToast('Phone must be exactly 10 digits!', 'error'); return }
+    setSaving(true)
     try {
       if (editId) {
         setCustomers(await updateCustomer(editId, form))
@@ -58,6 +62,8 @@ export default function Customers() {
     } catch(err) {
       playSound(false)
       showToast('✗ CUSTOMER NOT SAVED! Disk error: ' + err.message + ' — try again.', 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -68,15 +74,19 @@ export default function Customers() {
   }
 
   const doDelete = async () => {
+    if (deleting) return
+    setDeleting(true)
     try {
       setCustomers(await deleteCustomer(confirmDel.id))
       showToast('✓ Customer deleted')
       if (editId === confirmDel.id) resetForm()
+      setConfirmDel(null)
     } catch(err) {
       playSound(false)
       showToast('✗ NOT DELETED — disk error: ' + err.message, 'error')
+    } finally {
+      setDeleting(false)
     }
-    setConfirmDel(null)
   }
 
   const handleCopy = async (c) => {
@@ -150,8 +160,10 @@ export default function Customers() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary">{editId ? 'Update Customer' : 'Save Customer'}</button>
-            <button type="button" className="btn btn-outline" onClick={resetForm}>Reset</button>
+            <button type="submit" className="btn btn-primary disabled:opacity-60 disabled:cursor-wait" disabled={saving}>
+              {saving ? 'Saving…' : (editId ? 'Update Customer' : 'Save Customer')}
+            </button>
+            <button type="button" className="btn btn-outline" onClick={resetForm} disabled={saving}>Reset</button>
           </div>
         </form>
       </div>
@@ -254,8 +266,8 @@ export default function Customers() {
               "<span className="font-semibold text-slate-700">{confirmDel.name}</span>" will be permanently deleted. This cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDel(null)} className="btn btn-outline py-1 px-3">Cancel</button>
-              <button onClick={doDelete} className="btn py-1 px-3 bg-red-600 text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmDel(null)} className="btn btn-outline py-1 px-3" disabled={deleting}>Cancel</button>
+              <button onClick={doDelete} disabled={deleting} className="btn py-1 px-3 bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait">{deleting ? 'Deleting…' : 'Delete'}</button>
             </div>
           </div>
         </div>

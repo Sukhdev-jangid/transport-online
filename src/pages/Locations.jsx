@@ -15,6 +15,8 @@ export default function Locations() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(20)
+  const [saving, setSaving] = useState(false)     // blocks double-submit while a save is in flight
+  const [deleting, setDeleting] = useState(false)  // blocks double-click on delete
 
   const loadLocations = async () => setLocations(await getLocations())
   useEffect(() => { loadLocations() }, [])
@@ -33,7 +35,9 @@ export default function Locations() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return                       // ignore repeat clicks while saving
     if (!form.name.trim()) { showToast('Location name is required!', 'error'); return }
+    setSaving(true)
     try {
       if (editId) {
         setLocations(await updateLocation(editId, { name: form.name.trim(), state: form.state.trim() || 'Rajasthan' }))
@@ -43,7 +47,7 @@ export default function Locations() {
         showToast(`✓ Location '${form.name}' added!`)
       }
       resetForm()
-    } catch (err) { showToast('Error: ' + err.message, 'error') }
+    } catch (err) { showToast('Error: ' + err.message, 'error') } finally { setSaving(false) }
   }
 
   const startEdit = (l) => {
@@ -53,12 +57,14 @@ export default function Locations() {
   }
 
   const doDelete = async () => {
+    if (deleting) return
+    setDeleting(true)
     try {
       setLocations(await deleteLocation(confirmDel.id))
       showToast('✓ Location deleted')
       if (editId === confirmDel.id) resetForm()
-    } catch (err) { showToast('Error: ' + err.message, 'error') }
-    setConfirmDel(null)
+      setConfirmDel(null)
+    } catch (err) { showToast('Error: ' + err.message, 'error') } finally { setDeleting(false) }
   }
 
   return (
@@ -94,8 +100,8 @@ export default function Locations() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary">{editId ? 'Update Location' : 'Save Location'}</button>
-            <button type="button" className="btn btn-outline" onClick={resetForm}>Reset</button>
+            <button type="submit" className="btn btn-primary disabled:opacity-60 disabled:cursor-wait" disabled={saving}>{saving ? 'Saving…' : (editId ? 'Update Location' : 'Save Location')}</button>
+            <button type="button" className="btn btn-outline" onClick={resetForm} disabled={saving}>Reset</button>
           </div>
         </form>
       </div>
@@ -181,8 +187,8 @@ export default function Locations() {
               "<span className="font-semibold text-slate-700">{confirmDel.name}</span>" will be permanently deleted. This cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDel(null)} className="btn btn-outline py-1 px-3">Cancel</button>
-              <button onClick={doDelete} className="btn py-1 px-3 bg-red-600 text-white hover:bg-red-700">Delete</button>
+              <button onClick={() => setConfirmDel(null)} className="btn btn-outline py-1 px-3" disabled={deleting}>Cancel</button>
+              <button onClick={doDelete} disabled={deleting} className="btn py-1 px-3 bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait">{deleting ? 'Deleting…' : 'Delete'}</button>
             </div>
           </div>
         </div>

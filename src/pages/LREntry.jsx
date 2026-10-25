@@ -70,6 +70,13 @@ export default function LREntry() {
   const [custTargetParty, setCustTargetParty] = useState('consignor') // 'consignor' | 'consignee'
   const [newCustForm, setNewCustForm] = useState({ name: '', phone: '', city: '', address: '' })
 
+  // Guards against double-submit: while a save is in flight the button is
+  // disabled and repeat clicks are ignored, so a bill / customer / city can
+  // never be saved twice by rapid clicking.
+  const [saving, setSaving] = useState(false)          // main LR booking submit
+  const [savingCity, setSavingCity] = useState(false)  // inline add-city modal
+  const [savingCust, setSavingCust] = useState(false)  // inline add-customer modal
+
   // Form State
   const [form, setForm] = useState({
     lrNumber: '',
@@ -331,17 +338,23 @@ export default function LREntry() {
   // Handle Add New City Inline
   const handleCreateCity = async (e) => {
     e.preventDefault()
+    if (savingCity) return
     if (!newCityName.trim()) return
-    const updated = await addLocation(newCityName.trim())
-    setLocations(updated)
-    if (!form.fromCity) {
-      setForm(f => ({ ...f, fromCity: newCityName.trim() }))
-    } else if (!form.toCity) {
-      setForm(f => ({ ...f, toCity: newCityName.trim() }))
+    setSavingCity(true)
+    try {
+      const updated = await addLocation(newCityName.trim())
+      setLocations(updated)
+      if (!form.fromCity) {
+        setForm(f => ({ ...f, fromCity: newCityName.trim() }))
+      } else if (!form.toCity) {
+        setForm(f => ({ ...f, toCity: newCityName.trim() }))
+      }
+      showToast(`✓ Added city '${newCityName}'!`)
+      setNewCityName('')
+      setShowAddCity(false)
+    } finally {
+      setSavingCity(false)
     }
-    showToast(`✓ Added city '${newCityName}'!`)
-    setNewCityName('')
-    setShowAddCity(false)
   }
 
   // Handle Add New Customer Inline
@@ -359,11 +372,13 @@ export default function LREntry() {
 
   const handleCreateCustomer = async (e) => {
     e.preventDefault()
+    if (savingCust) return
     if (!newCustForm.name.trim()) return
     if (!isValidPhone(newCustForm.phone)) {
       showToast('Phone must be exactly 10 digits!', 'error')
       return
     }
+    setSavingCust(true)
     try {
       // addCustomer awaits the disk write — if it fails it throws and we land in
       // catch, so we never tell the user a party was saved when it wasn't.
@@ -396,12 +411,15 @@ export default function LREntry() {
     } catch (err) {
       playSound(false)
       showToast('✗ CUSTOMER NOT SAVED! Disk error: ' + err.message + ' — try again.', 'error')
+    } finally {
+      setSavingCust(false)
     }
   }
 
   // Submit LR Booking Form
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return
     if (!form.fromCity || !form.toCity) {
       showToast('Please select both From and To cities.', 'error')
       return
@@ -436,6 +454,7 @@ export default function LREntry() {
       return
     }
 
+    setSaving(true)
     try {
       // Auto-match or auto-create Consignor & Consignee in customer master
       const consignorRes = await findOrCreateCustomer({
@@ -520,6 +539,8 @@ export default function LREntry() {
       // impossible to miss — loud toast + failure buzzer. No print modal opens.
       playSound(false)
       showToast('✗ BILL NOT SAVED! Disk error: ' + err.message + ' — try again.', 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -1147,9 +1168,14 @@ export default function LREntry() {
             <div className="pt-4">
               <button
                 type="submit"
-                className="w-full py-3 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                disabled={saving}
+                className="w-full py-3 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait disabled:active:scale-100"
               >
-                {isEditing ? (
+                {saving ? (
+                  <>
+                    <Save size={16} className="animate-pulse" /> Saving…
+                  </>
+                ) : isEditing ? (
                   <>
                     <Save size={16} /> Update Bill (Ctrl+S)
                   </>
@@ -1215,9 +1241,10 @@ export default function LREntry() {
               <button
                 type="button"
                 onClick={handleCreateCity}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                disabled={savingCity}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
               >
-                <Plus size={14} /> Add City
+                <Plus size={14} /> {savingCity ? 'Adding…' : 'Add City'}
               </button>
             </div>
           </div>
@@ -1320,9 +1347,10 @@ export default function LREntry() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  disabled={savingCust}
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                 >
-                  <Save size={14} /> Save Party
+                  <Save size={14} /> {savingCust ? 'Saving…' : 'Save Party'}
                 </button>
               </div>
             </form>
