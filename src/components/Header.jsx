@@ -1,8 +1,86 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, Settings, Lock, FileText, User, Truck, ClipboardList } from 'lucide-react'
+import { Search, Plus, Settings, Lock, FileText, User, Truck, ClipboardList, Building2, Check, ChevronDown } from 'lucide-react'
 import { COMPANY } from '../config/company'
 import { getLREntries, getCustomers, getVehicles } from '../db/database'
+import { useRole } from '../context/RoleContext'
+
+// Admin-only dropdown to choose which branch to work in. The selection drives
+// both what the lists show and which branch new records are saved to. Non-admins
+// never see this — they are locked to their single home branch.
+function BranchSwitcher() {
+  const { isAdmin, branches, activeBranch, switchBranch } = useRole()
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
+
+  if (!isAdmin) return null
+
+  const current = branches.find(b => b.id === activeBranch)
+  const label = activeBranch == null ? 'All Branches' : (current?.name || 'Select branch')
+
+  const choose = (id) => { switchBranch(id); setOpen(false) }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Switch branch"
+        className="flex items-center gap-2 h-8 pl-2.5 pr-2 rounded-lg border border-slate-200 bg-white
+                   text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-primary-300 transition cursor-pointer max-w-[220px]"
+      >
+        <Building2 size={14} className="text-primary-600 shrink-0" />
+        <span className="truncate">{label}</span>
+        <ChevronDown size={13} className="text-slate-400 shrink-0" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 w-60 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden z-50">
+          <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Working in
+          </div>
+          <ul className="max-h-72 overflow-y-auto py-1">
+            <li>
+              <button
+                onClick={() => choose(null)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition">
+                <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                  <Building2 size={13} />
+                </span>
+                <span className="flex-1 text-xs font-semibold text-slate-800">All Branches</span>
+                {activeBranch == null && <Check size={14} className="text-primary-600 shrink-0" />}
+              </button>
+            </li>
+            {branches.map(b => (
+              <li key={b.id}>
+                <button
+                  onClick={() => choose(b.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition">
+                  <span className="w-6 h-6 rounded-md bg-primary-50 flex items-center justify-center text-primary-600 shrink-0 text-[10px] font-bold">
+                    {(b.code || b.name || '?').slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold text-slate-800 truncate">{b.name}</span>
+                    {b.code && <span className="block text-[10px] text-slate-400 truncate">{b.code}</span>}
+                  </span>
+                  {activeBranch === b.id && <Check size={14} className="text-primary-600 shrink-0" />}
+                </button>
+              </li>
+            ))}
+            {branches.length === 0 && (
+              <li className="px-3 py-3 text-xs text-slate-400 text-center">No branches yet.</li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const MAX_PER_GROUP = 5
 
@@ -148,6 +226,11 @@ export default function Header({ onLock }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Branch switcher — admin only */}
+      <div className="px-2">
+        <BranchSwitcher />
       </div>
 
       {/* Right Actions — functional shortcuts */}

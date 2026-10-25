@@ -10,7 +10,21 @@
 import { supabase } from './supabaseClient'
 import { applyCompanySettings } from '../config/company'
 import { billTotal } from '../utils/billing'
-import { currentBranchId } from './session'
+import { currentBranchId, viewBranchId, settingsBranchId } from './session'
+
+// Thrown when an admin tries to create a record while on "All Branches" (no
+// branch chosen). The create pages catch this and show "pick a branch first".
+export const NO_BRANCH_SELECTED = 'NO_BRANCH_SELECTED'
+
+// The branch new records (and their server-generated numbers) belong to. Passed
+// explicitly into the numbering RPCs so an admin working in a selected branch
+// gets THAT branch's number series, not their home branch's. Null means the
+// admin is on "All Branches" and must pick one before creating anything.
+function targetBranchId() {
+  const bid = currentBranchId()
+  if (bid == null) throw new Error(NO_BRANCH_SELECTED)
+  return bid
+}
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
@@ -20,11 +34,23 @@ function unwrap({ data, error }) {
   return data
 }
 
-// Stamp a new row with the signed-in user's branch so it passes the RLS branch
-// check. Admins may be on any branch; their currentBranchId is used too. Every
-// INSERT in this module goes through this.
+// Stamp a new row with the branch it belongs to so it passes the RLS branch
+// check. For staff/sub-admin that is always their home branch. For an admin it
+// is the branch currently selected in the header switcher — and if they are on
+// "All Branches" (no branch chosen) we refuse the write instead of guessing, so
+// a record never lands in the wrong branch. Every INSERT goes through this.
 function withBranch(obj) {
-  return { ...obj, branch_id: currentBranchId() }
+  return { ...obj, branch_id: targetBranchId() }
+}
+
+// Scope a SELECT query to the branch the user is currently viewing. RLS already
+// hides other branches from staff/sub-admins; this additionally lets an admin
+// narrow the view to one branch via the header switcher. When the admin picks
+// "All Branches" (viewBranchId() === null) no filter is applied, so every
+// branch's rows come through.
+function scopeBranch(query) {
+  const bid = viewBranchId()
+  return bid == null ? query : query.eq('branch_id', bid)
 }
 
 // ── Init ──────────────────────────────────────────────
@@ -54,7 +80,7 @@ export async function saveDatabase() { return { ok: true } }
 
 // ── Locations Master ───────────────────────────────────
 export async function getLocations() {
-  return unwrap(await supabase.from('locations').select('*').order('name')) || []
+  return unwrap(await scopeBranch(supabase.from('locations').select('*')).order('name')) || []
 }
 
 export async function addLocation(name, state = 'Rajasthan') {
@@ -74,12 +100,12 @@ export async function deleteLocation(id) {
 
 // ── Items Master Rates ─────────────────────────────────
 export async function getItemsMaster() {
-  const master = unwrap(await supabase.from('items_master').select('*').order('item_name')) || []
+  const master = unwrap(await scopeBranch(supabase.from('items_master').select('*')).order('item_name')) || []
   try {
     // Include item names that only ever appeared on shipments (historical), so
     // the autocomplete/list still shows them even if never added to the master.
     const shipmentRows = unwrap(
-      await supabase.from('shipment_items').select('item_name, rate')
+      await scopeBranch(supabase.from('shipment_items').select('item_name, rate'))
     ) || []
     const existingNames = new Set(master.map(m => m.item_name?.trim().toLowerCase()))
     for (const row of shipmentRows) {
@@ -120,7 +146,7 @@ export async function deleteItemMaster(id) {
 
 // ── Customer CRUD ─────────────────────────────────────
 export async function getCustomers() {
-  return unwrap(await supabase.from('customers').select('*').order('name')) || []
+  return unwrap(await scopeBranch(supabase.from('customers').select('*')).order('name')) || []
 }
 
 export async function addCustomer({ name, phone, city, address }) {
@@ -244,7 +270,7 @@ export async function getCustomerAccount(customerId) {
 
 // ── Multi-Item LR Entry CRUD ──────────────────────────
 export async function getLREntries() {
-  return unwrap(await supabase.from('lr_entries').select('*').order('id', { ascending: false })) || []
+  return unwrap(await scopeBranch(supabase.from('lr_entries').select('*')).order('id', { ascending: false })) || []
 }
 
 export async function getShipmentItems(shipmentId) {
@@ -322,8 +348,9 @@ export async function addLREntryWithItems({
   bCharge, hamali, pickup, delivery, totalAmount,
   advancePaid, balanceDue, paymentType
 }) {
-  // Server-side atomic LR number (two users never collide).
-  const lrNumber = unwrap(await supabase.rpc('next_lr_number'))
+  // Server-side atomic LR number for the target branch (two users never collide,
+  // and each branch keeps its own series).
+  const lrNumber = unwrap(await supabase.rpc('next_lr_number', { p_branch_id: targetBranchId() }))
   const itemSummary = (itemsList || []).map(i => `${i.itemName} (x${i.quantity})`).join(', ')
 
   const inserted = unwrap(await supabase.from('lr_entries').insert(withBranch({
@@ -391,12 +418,12 @@ export async function updateLREntryWithItems(id, {
 
 // Preview of the number the NEXT bill will get (for forms/settings).
 export async function peekNextLRNumber() {
-  return unwrap(await supabase.rpc('next_lr_number'))
+  return unwrap(await supabase.rpc('next_lr_number', { p_branch_id: targetBranchId() }))
 }
 
 // ── Vehicle CRUD ─────────────────────────────────────
 export async function getVehicles() {
-  return unwrap(await supabase.from('vehicles').select('*').order('created_at', { ascending: false })) || []
+  return unwrap(await scopeBranch(supabase.from('vehicles').select('*')).order('created_at', { ascending: false })) || []
 }
 
 export async function addVehicle({ vehicleNumber, vehicleType, model, capacity, ownership = 'Owned' }) {
@@ -420,7 +447,7 @@ export async function deleteVehicle(id) {
 
 // ── Maintenance Logs CRUD ─────────────────────────────
 export async function getMaintenanceLogs() {
-  return unwrap(await supabase.from('maintenance_logs').select('*')
+  return unwrap(await scopeBranch(supabase.from('maintenance_logs').select('*'))
     .order('service_date', { ascending: false }).order('id', { ascending: false })) || []
 }
 
@@ -434,7 +461,7 @@ export async function addMaintenanceLog({ vehicleNumber, serviceType, serviceDat
 
 // ── Drivers Master CRUD ───────────────────────────────
 export async function getDrivers() {
-  return unwrap(await supabase.from('drivers').select('*').order('name')) || []
+  return unwrap(await scopeBranch(supabase.from('drivers').select('*')).order('name')) || []
 }
 
 export async function addDriver({ name, phone, address, vehicleNumber }) {
@@ -458,12 +485,12 @@ export async function deleteDriver(id) {
 
 // ── Challan (Loading Sheet / Manifest) CRUD ───────────
 export async function peekNextChallanNumber() {
-  return unwrap(await supabase.rpc('next_challan_number'))
+  return unwrap(await supabase.rpc('next_challan_number', { p_branch_id: targetBranchId() }))
 }
 
 // All challans, newest first, each with its linked bilties resolved live.
 export async function getChallans() {
-  const challans = unwrap(await supabase.from('challans').select('*').order('id', { ascending: false })) || []
+  const challans = unwrap(await scopeBranch(supabase.from('challans').select('*')).order('id', { ascending: false })) || []
   return Promise.all(challans.map(async c => ({ ...c, bilties: await getChallanBilties(c.id) })))
 }
 
@@ -487,7 +514,7 @@ export async function getChallanBilties(challanId) {
 }
 
 export async function addChallan({ manifestDate, vehicleNumber, driverName, driverPhone, fromCentre, toCentre, lrIds }) {
-  const challanNumber = unwrap(await supabase.rpc('next_challan_number'))
+  const challanNumber = unwrap(await supabase.rpc('next_challan_number', { p_branch_id: targetBranchId() }))
   const inserted = unwrap(await supabase.from('challans').insert(withBranch({
     challan_number: challanNumber, manifest_date: manifestDate || '', vehicle_number: vehicleNumber || '',
     driver_name: driverName || '', driver_phone: driverPhone || '', from_centre: fromCentre || '', to_centre: toCentre || '',
@@ -529,7 +556,7 @@ export async function deleteChallan(id) {
 
 // ── Vendors CRUD ──────────────────────────────────────
 export async function getVendors() {
-  return unwrap(await supabase.from('vendors').select('*').order('name')) || []
+  return unwrap(await scopeBranch(supabase.from('vendors').select('*')).order('name')) || []
 }
 
 export async function addVendor({ name, serviceType, phone, city, address, gstin }) {
@@ -555,9 +582,12 @@ export async function deleteVendor(id) {
 // Each setting is one JSON blob stored under a key in app_settings.
 async function getSetting(key) {
   // RLS already restricts rows to the caller's branch; filter by branch too so
-  // an admin (who can read all branches) still gets THEIR branch's setting.
+  // an admin (who can read all branches) still gets ONE branch's setting. Uses
+  // the display fallback (selected branch, or home branch on "All Branches") so
+  // company branding always resolves to something, even before a branch is
+  // chosen.
   let q = supabase.from('app_settings').select('value').eq('key', key)
-  const bid = currentBranchId()
+  const bid = settingsBranchId()
   if (bid != null) q = q.eq('branch_id', bid)
   const rows = unwrap(await q) || []
   if (rows[0]?.value) {
@@ -567,8 +597,10 @@ async function getSetting(key) {
 }
 
 async function saveSetting(key, obj) {
+  // Settings are per-branch. Save to the display-fallback branch (selected, or
+  // home on "All Branches") rather than blocking, so settings never throw.
   unwrap(await supabase.from('app_settings').upsert(
-    withBranch({ key, value: JSON.stringify(obj || {}) }),
+    { key, value: JSON.stringify(obj || {}), branch_id: settingsBranchId() },
     { onConflict: 'branch_id,key' }
   ))
 }
@@ -648,7 +680,9 @@ export async function getDashboardStats() {
   }
 
   const count = async (table) => {
-    const { count: c } = await supabase.from(table).select('*', { count: 'exact', head: true })
+    const { count: c } = await scopeBranch(
+      supabase.from(table).select('*', { count: 'exact', head: true })
+    )
     return c || 0
   }
   const [customers, vendors, vehicles, drivers] = await Promise.all([
@@ -663,11 +697,11 @@ export async function getDashboardStats() {
 
 // ── Statements ────────────────────────────────────────
 export async function peekNextStatementNumber() {
-  return unwrap(await supabase.rpc('next_statement_number'))
+  return unwrap(await supabase.rpc('next_statement_number', { p_branch_id: targetBranchId() }))
 }
 
 export async function getStatements() {
-  return unwrap(await supabase.from('statements').select('*').order('id', { ascending: false })) || []
+  return unwrap(await scopeBranch(supabase.from('statements').select('*')).order('id', { ascending: false })) || []
 }
 
 export async function getStatement(id) {
@@ -676,7 +710,7 @@ export async function getStatement(id) {
 }
 
 export async function addStatement({ createdDate, partyName, partyRole, periodLabel, totalBills, totalPackages, totalAmount, biltyIds }) {
-  const statementNumber = unwrap(await supabase.rpc('next_statement_number'))
+  const statementNumber = unwrap(await supabase.rpc('next_statement_number', { p_branch_id: targetBranchId() }))
   unwrap(await supabase.from('statements').insert(withBranch({
     statement_number: statementNumber,
     created_date: createdDate || todayISO(),

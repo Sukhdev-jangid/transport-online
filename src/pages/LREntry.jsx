@@ -12,6 +12,7 @@ import {
   peekNextLRNumber
 } from '../db/database'
 import BiltyInvoiceModal from '../components/BiltyInvoiceModal'
+import { useRole } from '../context/RoleContext'
 import { isValidPhone } from '../utils/validation'
 import PhoneInput from '../components/PhoneInput'
 import Select from '../components/Select'
@@ -36,6 +37,11 @@ export default function LREntry() {
   const [itemsMaster, setItemsMaster] = useState([])
   const [customers, setCustomers] = useState([])
   const [nextLR, setNextLR] = useState('')
+
+  // Admin on "All Branches" has no branch chosen, so a new bill would have no
+  // home. We block booking until they pick a branch from the header switcher.
+  const { isAdmin, activeBranch } = useRole()
+  const noBranchChosen = isAdmin && activeBranch == null
 
   const [search, setSearch] = useState('')
   const [toast, setToast] = useState(null)
@@ -420,6 +426,10 @@ export default function LREntry() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (saving) return
+    if (noBranchChosen) {
+      showToast('Please select a branch from the top first — a new bill cannot be created in "All Branches".', 'error')
+      return
+    }
     if (!form.fromCity || !form.toCity) {
       showToast('Please select both From and To cities.', 'error')
       return
@@ -606,6 +616,16 @@ export default function LREntry() {
           )}
         </div>
       </div>
+
+      {/* Admin on "All Branches": booking is blocked until a branch is picked. */}
+      {noBranchChosen && (
+        <div className="mb-2.5 flex items-center gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-amber-800">
+          <ShieldAlert size={16} className="shrink-0" />
+          <span className="text-xs font-semibold">
+            You are currently in "All Branches". Select a branch from the header above to create a new bill.
+          </span>
+        </div>
+      )}
 
       {/* Main Booking Console Form */}
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-2.5">
@@ -1168,10 +1188,15 @@ export default function LREntry() {
             <div className="pt-4">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || noBranchChosen}
+                title={noBranchChosen ? 'Select a branch from the header first' : undefined}
                 className="w-full py-3 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait disabled:active:scale-100"
               >
-                {saving ? (
+                {noBranchChosen ? (
+                  <>
+                    <ShieldAlert size={16} /> Select a branch first
+                  </>
+                ) : saving ? (
                   <>
                     <Save size={16} className="animate-pulse" /> Saving…
                   </>

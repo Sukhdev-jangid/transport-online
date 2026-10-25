@@ -22,6 +22,7 @@ import UsersPage from './pages/UsersPage'
 import Branches from './pages/Branches'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
+import BranchGate from './components/BranchGate'
 import { initDatabase } from './db/database'
 import { getSession, onAuthChange, signOut } from './db/auth'
 import { RoleProvider, useRole } from './context/RoleContext'
@@ -102,7 +103,7 @@ export default function App() {
 // The authenticated application. Routes and sidebar are gated by the user's
 // role (admin / sub_admin / staff). Staff see booking-only screens.
 function AuthedApp({ location, saveError, setSaveError, onLock }) {
-  const { loading, role, canManageUsers, canManageBranches, isStaff } = useRole()
+  const { loading, role, canManageUsers, canManageBranches, isStaff, activeBranch } = useRole()
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-screen gap-4 font-sans bg-white">
@@ -137,33 +138,41 @@ function AuthedApp({ location, saveError, setSaveError, onLock }) {
         </div>
       )}
       {/* key on the route so navigating away from a crashed screen resets the
-          boundary — one broken page never permanently breaks the whole app. */}
-      <ErrorBoundary key={location.pathname}>
+          boundary — one broken page never permanently breaks the whole app.
+          Also key on the admin's active branch so switching branches remounts
+          every page and they refetch data for the newly selected branch. */}
+      <ErrorBoundary key={`${location.pathname}::${activeBranch ?? 'all'}`}>
         <Routes>
+          {/* Branch-specific pages are wrapped in <BranchGate>: an admin must
+              pick ONE branch from the header switcher before any of these
+              render (on "All Branches" they show a "select a branch" prompt).
+              Non-admins pass straight through — they have a single branch. */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/lr-entry" element={<LREntry />} />
-          <Route path="/lr-entry/:lrNumber" element={<LREntry />} />
-          <Route path="/bilty" element={<Bilty />} />
-          <Route path="/bilty/:lrNumber" element={<BillDetail />} />
-          <Route path="/challans" element={<Challans />} />
-          <Route path="/statements" element={<Statements />} />
+          <Route path="/dashboard" element={<BranchGate><Dashboard /></BranchGate>} />
+          <Route path="/lr-entry" element={<BranchGate><LREntry /></BranchGate>} />
+          <Route path="/lr-entry/:lrNumber" element={<BranchGate><LREntry /></BranchGate>} />
+          <Route path="/bilty" element={<BranchGate><Bilty /></BranchGate>} />
+          <Route path="/bilty/:lrNumber" element={<BranchGate><BillDetail /></BranchGate>} />
+          <Route path="/challans" element={<BranchGate><Challans /></BranchGate>} />
+          <Route path="/statements" element={<BranchGate><Statements /></BranchGate>} />
 
           {/* Masters & settings — hidden from staff (booking-only). */}
-          {!isStaff && <Route path="/item-rates" element={<ItemRates />} />}
-          {!isStaff && <Route path="/vehicles" element={<Vehicles />} />}
-          {!isStaff && <Route path="/all-drivers" element={<AllDrivers />} />}
-          {!isStaff && <Route path="/maintenance" element={<Maintenance />} />}
-          {!isStaff && <Route path="/locations" element={<Locations />} />}
-          {!isStaff && <Route path="/vendors" element={<Vendors />} />}
-          <Route path="/customers" element={<Customers />} />
-          <Route path="/customers/:id" element={<CustomerAccount />} />
-          {!isStaff && <Route path="/settings" element={<CompanySettings />} />}
+          {!isStaff && <Route path="/item-rates" element={<BranchGate><ItemRates /></BranchGate>} />}
+          {!isStaff && <Route path="/vehicles" element={<BranchGate><Vehicles /></BranchGate>} />}
+          {!isStaff && <Route path="/all-drivers" element={<BranchGate><AllDrivers /></BranchGate>} />}
+          {!isStaff && <Route path="/maintenance" element={<BranchGate><Maintenance /></BranchGate>} />}
+          {!isStaff && <Route path="/locations" element={<BranchGate><Locations /></BranchGate>} />}
+          {!isStaff && <Route path="/vendors" element={<BranchGate><Vendors /></BranchGate>} />}
+          <Route path="/customers" element={<BranchGate><Customers /></BranchGate>} />
+          <Route path="/customers/:id" element={<BranchGate><CustomerAccount /></BranchGate>} />
+          {!isStaff && <Route path="/settings" element={<BranchGate><CompanySettings /></BranchGate>} />}
 
-          {/* Everyone can see & edit their own profile / password. */}
+          {/* Everyone can see & edit their own profile / password. Not branch-
+              specific, so NOT gated. */}
           <Route path="/profile" element={<Profile />} />
 
-          {/* User & branch management. */}
+          {/* User & branch management — admin needs these on "All Branches" to
+              create branches in the first place, so they are NOT gated. */}
           {canManageUsers && <Route path="/users" element={<UsersPage />} />}
           {canManageBranches && <Route path="/branches" element={<Branches />} />}
 
