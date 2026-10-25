@@ -18,9 +18,14 @@ import AllDrivers from './pages/AllDrivers'
 import Locations from './pages/Locations'
 import Vendors from './pages/Vendors'
 import CompanySettings from './pages/CompanySettings'
+import UsersPage from './pages/UsersPage'
+import Branches from './pages/Branches'
+import Profile from './pages/Profile'
 import Login from './pages/Login'
 import { initDatabase } from './db/database'
 import { getSession, onAuthChange, signOut } from './db/auth'
+import { RoleProvider, useRole } from './context/RoleContext'
+import { clearProfile } from './db/session'
 
 export default function App() {
   const location = useLocation()
@@ -81,8 +86,47 @@ export default function App() {
     <Login onUnlock={() => setUnlocked(true)} />
   )
 
+  // Once logged in, load the role/branch profile, then render the app.
   return (
-    <Layout onLock={() => signOut()}>
+    <RoleProvider>
+      <AuthedApp
+        location={location}
+        saveError={saveError}
+        setSaveError={setSaveError}
+        onLock={() => { clearProfile(); signOut() }}
+      />
+    </RoleProvider>
+  )
+}
+
+// The authenticated application. Routes and sidebar are gated by the user's
+// role (admin / sub_admin / staff). Staff see booking-only screens.
+function AuthedApp({ location, saveError, setSaveError, onLock }) {
+  const { loading, role, canManageUsers, canManageBranches, isStaff } = useRole()
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center h-screen gap-4 font-sans bg-white">
+      <div className="spinner" />
+      <div className="text-slate-500 text-sm font-medium">Loading your profile…</div>
+    </div>
+  )
+
+  // A signed-in user with no profile row yet (e.g. created in the dashboard but
+  // not linked). Block the app with a clear message rather than failing writes.
+  if (!role) return (
+    <div className="flex flex-col items-center justify-center h-screen gap-4 font-sans bg-white px-6 text-center">
+      <AlertTriangle size={40} className="text-amber-500" />
+      <div className="text-slate-800 font-semibold">Account not set up</div>
+      <div className="text-slate-500 text-sm max-w-md">
+        Your login works, but no role/branch has been assigned yet. Ask your
+        admin to add you, or set your profile in the Supabase dashboard.
+      </div>
+      <button onClick={onLock} className="btn btn-secondary mt-2">Sign out</button>
+    </div>
+  )
+
+  return (
+    <Layout onLock={onLock}>
       {saveError && (
         <div className="fixed top-0 left-0 right-0 z-[10000] bg-red-600 text-white px-4 py-2.5 text-xs font-semibold flex items-center justify-between shadow-lg">
           <span className="flex items-center gap-1.5">
@@ -104,15 +148,25 @@ export default function App() {
           <Route path="/bilty/:lrNumber" element={<BillDetail />} />
           <Route path="/challans" element={<Challans />} />
           <Route path="/statements" element={<Statements />} />
-          <Route path="/item-rates" element={<ItemRates />} />
-          <Route path="/vehicles" element={<Vehicles />} />
-          <Route path="/all-drivers" element={<AllDrivers />} />
-          <Route path="/maintenance" element={<Maintenance />} />
-          <Route path="/locations" element={<Locations />} />
-          <Route path="/vendors" element={<Vendors />} />
+
+          {/* Masters & settings — hidden from staff (booking-only). */}
+          {!isStaff && <Route path="/item-rates" element={<ItemRates />} />}
+          {!isStaff && <Route path="/vehicles" element={<Vehicles />} />}
+          {!isStaff && <Route path="/all-drivers" element={<AllDrivers />} />}
+          {!isStaff && <Route path="/maintenance" element={<Maintenance />} />}
+          {!isStaff && <Route path="/locations" element={<Locations />} />}
+          {!isStaff && <Route path="/vendors" element={<Vendors />} />}
           <Route path="/customers" element={<Customers />} />
           <Route path="/customers/:id" element={<CustomerAccount />} />
-          <Route path="/settings" element={<CompanySettings />} />
+          {!isStaff && <Route path="/settings" element={<CompanySettings />} />}
+
+          {/* Everyone can see & edit their own profile / password. */}
+          <Route path="/profile" element={<Profile />} />
+
+          {/* User & branch management. */}
+          {canManageUsers && <Route path="/users" element={<UsersPage />} />}
+          {canManageBranches && <Route path="/branches" element={<Branches />} />}
+
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </ErrorBoundary>

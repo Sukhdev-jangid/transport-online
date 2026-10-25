@@ -3,9 +3,13 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FileText, Users, Truck,
   Map, Wrench, Warehouse,
-  BookUser, Tag, Settings, ClipboardList, FileSpreadsheet
+  BookUser, Tag, Settings, ClipboardList, FileSpreadsheet,
+  UserCog, Building2, UserCircle
 } from 'lucide-react'
+import { useRole } from '../context/RoleContext'
 
+// Each item may carry a `roles` list. If present, the item only shows for those
+// roles; if absent, it shows for everyone. Staff are booking-only.
 const sections = [
   {
     label: 'Dashboard',
@@ -20,29 +24,45 @@ const sections = [
       { to: '/bilty', icon: FileText, label: 'Bilty Records' },
       { to: '/challans', icon: ClipboardList, label: 'Challans' },
       { to: '/statements', icon: FileSpreadsheet, label: 'Statements' },
-      { to: '/item-rates', icon: Tag, label: 'Item Rates Master' },
-      { to: '/locations', icon: Warehouse, label: 'Locations' },
+      { to: '/item-rates', icon: Tag, label: 'Item Rates Master', roles: ['admin', 'sub_admin'] },
+      { to: '/locations', icon: Warehouse, label: 'Locations', roles: ['admin', 'sub_admin'] },
     ],
   },
   {
     label: 'Clients & Vendors',
     items: [
       { to: '/customers', icon: Users, label: 'Customer List' },
-      { to: '/vendors', icon: BookUser, label: 'Vendor Directory' },
+      { to: '/vendors', icon: BookUser, label: 'Vendor Directory', roles: ['admin', 'sub_admin'] },
     ],
   },
   {
     label: 'Fleet Management',
+    roles: ['admin', 'sub_admin'],
     items: [
-      { to: '/vehicles', icon: Truck, label: 'All Vehicle List' },
-      { to: '/all-drivers', icon: Users, label: 'All Drivers' },
-      { to: '/maintenance', icon: Wrench, label: 'Maintenance Logs' },
+      { to: '/vehicles', icon: Truck, label: 'All Vehicle List', roles: ['admin', 'sub_admin'] },
+      { to: '/all-drivers', icon: Users, label: 'All Drivers', roles: ['admin', 'sub_admin'] },
+      { to: '/maintenance', icon: Wrench, label: 'Maintenance Logs', roles: ['admin', 'sub_admin'] },
+    ],
+  },
+  {
+    label: 'Administration',
+    roles: ['admin', 'sub_admin'],
+    items: [
+      { to: '/users', icon: UserCog, label: 'User Management', roles: ['admin', 'sub_admin'] },
+      { to: '/branches', icon: Building2, label: 'Branches', roles: ['admin'] },
     ],
   },
   {
     label: 'Settings',
+    roles: ['admin', 'sub_admin'],
     items: [
-      { to: '/settings', icon: Settings, label: 'Company Settings' },
+      { to: '/settings', icon: Settings, label: 'Company Settings', roles: ['admin', 'sub_admin'] },
+    ],
+  },
+  {
+    label: 'My Account',
+    items: [
+      { to: '/profile', icon: UserCircle, label: 'My Profile' },
     ],
   },
 ]
@@ -51,10 +71,19 @@ const sections = [
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'
 
 export default function Sidebar() {
+  const { role } = useRole()
+  const allowed = (item) => !item.roles || item.roles.includes(role)
+
+  // Filter sections + their items by role; drop any section left empty.
+  const visibleSections = sections
+    .filter(allowed)
+    .map(s => ({ ...s, items: s.items.filter(allowed) }))
+    .filter(s => s.items.length > 0)
+
   return (
     <aside className="bg-white border-r border-slate-200 flex flex-col overflow-x-hidden">
       <div className="flex-1 overflow-y-auto pb-2">
-        {sections.map((section, idx) => (
+        {visibleSections.map((section, idx) => (
           <div key={section.label} className={`px-2.5 ${idx === 0 ? 'pt-2.5' : 'pt-2'} pb-0.5`}>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 mb-1">
               {section.label}

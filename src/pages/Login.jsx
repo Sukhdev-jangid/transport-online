@@ -1,17 +1,17 @@
 import React, { useState } from 'react'
 import { Lock, Eye, EyeOff, Mail, ShieldCheck } from 'lucide-react'
 import { COMPANY } from '../config/company'
-import { signIn, signUp, resetPassword } from '../db/auth'
+import { signIn, resetPassword } from '../db/auth'
 
-// The login gate, backed by Supabase Auth. Three modes:
+// The login gate, backed by Supabase Auth. Two modes:
 //   'enter'   — sign in with email + password
-//   'setup'   — create a new account (email + password)
 //   'forgot'  — send a password-reset email
+// There is no in-app sign-up: accounts are created by an admin (User
+// Management) or in the Supabase dashboard. Public sign-up is disabled.
 export default function Login({ onUnlock }) {
   const [mode, setMode] = useState('enter')
   const [email, setEmail] = useState('')
   const [pw, setPw] = useState('')
-  const [pw2, setPw2] = useState('')
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -34,28 +34,6 @@ export default function Login({ onUnlock }) {
     setBusy(false)
   }
 
-  const submitSetup = async (e) => {
-    e.preventDefault()
-    setError(''); setNotice('')
-    if (!validEmail(email)) { setError('Enter a valid email address.'); return }
-    if (pw.length < 6) { setError('Password must be at least 6 characters.'); return }
-    if (pw !== pw2) { setError('Passwords do not match.'); return }
-    setBusy(true)
-    try {
-      const res = await signUp(email, pw)
-      if (!res.ok) { setError(res.error); setBusy(false); return }
-      if (res.needsConfirmation) {
-        setNotice('Account created. Check your email to confirm, then sign in.')
-        setMode('enter'); setPw(''); setPw2('')
-      } else {
-        onUnlock()   // confirmation off → already signed in
-      }
-    } catch (err) {
-      setError('Could not create account: ' + err.message)
-    }
-    setBusy(false)
-  }
-
   const submitForgot = async (e) => {
     e.preventDefault()
     setError(''); setNotice('')
@@ -73,12 +51,10 @@ export default function Login({ onUnlock }) {
     setBusy(false)
   }
 
-  const title = mode === 'setup' ? 'Create an account' : mode === 'forgot' ? 'Reset password' : 'Welcome back'
-  const subtitle = mode === 'setup'
-    ? 'Sign up with your email to access the Transport System.'
-    : mode === 'forgot'
-      ? 'Enter your email and we will send you a reset link.'
-      : 'Sign in with your email to open the Transport System.'
+  const title = mode === 'forgot' ? 'Reset password' : 'Welcome back'
+  const subtitle = mode === 'forgot'
+    ? 'Enter your email and we will send you a reset link.'
+    : 'Sign in with your email to open the Transport System.'
 
   return (
     <Shell>
@@ -111,34 +87,12 @@ export default function Login({ onUnlock }) {
             className="w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition disabled:opacity-50">
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
-          <div className="flex items-center justify-between">
-            <button type="button" onClick={() => { setMode('setup'); setError(''); setNotice(''); setPw(''); setPw2('') }}
-              className="text-xs text-slate-500 hover:text-primary-600">
-              Create account
-            </button>
-            <button type="button" onClick={() => { setMode('forgot'); setError(''); setNotice(''); setPw(''); setPw2('') }}
+          <div className="flex items-center justify-end">
+            <button type="button" onClick={() => { setMode('forgot'); setError(''); setNotice(''); setPw('') }}
               className="text-xs text-slate-500 hover:text-primary-600">
               Forgot password?
             </button>
           </div>
-        </form>
-      )}
-
-      {/* SETUP mode */}
-      {mode === 'setup' && (
-        <form onSubmit={submitSetup} className="space-y-3">
-          <EmailField value={email} onChange={setEmail} autoFocus />
-          <PasswordField value={pw} onChange={setPw} show={show} setShow={setShow} placeholder="New password" />
-          <PasswordField value={pw2} onChange={setPw2} show={show} setShow={setShow} placeholder="Confirm password" />
-          {error && <p className="text-xs text-red-600">{error}</p>}
-          <button type="submit" disabled={busy}
-            className="w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white hover:bg-primary-700 transition disabled:opacity-50">
-            {busy ? 'Creating…' : 'Create account'}
-          </button>
-          <button type="button" onClick={() => { setMode('enter'); setError(''); setNotice(''); setPw(''); setPw2('') }}
-            className="w-full text-center text-xs text-slate-500 hover:text-primary-600">
-            Back to sign in
-          </button>
         </form>
       )}
 

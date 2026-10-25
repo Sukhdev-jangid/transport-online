@@ -10,6 +10,7 @@
 import { supabase } from './supabaseClient'
 import { applyCompanySettings } from '../config/company'
 import { billTotal } from '../utils/billing'
+import { currentBranchId } from './session'
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
@@ -17,6 +18,13 @@ const todayISO = () => new Date().toISOString().slice(0, 10)
 function unwrap({ data, error }) {
   if (error) throw new Error(error.message || 'Database error')
   return data
+}
+
+// Stamp a new row with the signed-in user's branch so it passes the RLS branch
+// check. Admins may be on any branch; their currentBranchId is used too. Every
+// INSERT in this module goes through this.
+function withBranch(obj) {
+  return { ...obj, branch_id: currentBranchId() }
 }
 
 // ── Init ──────────────────────────────────────────────
@@ -50,7 +58,7 @@ export async function getLocations() {
 }
 
 export async function addLocation(name, state = 'Rajasthan') {
-  unwrap(await supabase.from('locations').insert({ name, state }))
+  unwrap(await supabase.from('locations').insert(withBranch({ name, state })))
   return getLocations()
 }
 
@@ -92,9 +100,9 @@ export async function getItemsMaster() {
 }
 
 export async function addItemMaster({ itemName, defaultRate, rateType = 'unit', category = 'General' }) {
-  unwrap(await supabase.from('items_master').insert({
+  unwrap(await supabase.from('items_master').insert(withBranch({
     item_name: itemName, default_rate: defaultRate, rate_type: rateType, category,
-  }))
+  })))
   return getItemsMaster()
 }
 
@@ -116,7 +124,7 @@ export async function getCustomers() {
 }
 
 export async function addCustomer({ name, phone, city, address }) {
-  unwrap(await supabase.from('customers').insert({ name, phone, city, address }))
+  unwrap(await supabase.from('customers').insert(withBranch({ name, phone, city, address })))
   return getCustomers()
 }
 
@@ -183,9 +191,9 @@ export async function findOrCreateCustomer({ name, phone, city, address, existin
   }
 
   // 4. new customer
-  const rows = unwrap(await supabase.from('customers').insert({
+  const rows = unwrap(await supabase.from('customers').insert(withBranch({
     name: cleanName, phone: (phone || '').trim(), city: (city || '').trim(), address: (address || '').trim(),
-  }).select('id'))
+  })).select('id'))
   const newId = rows?.[0]?.id
   return { id: newId, wasCreated: true }
 }
@@ -245,7 +253,10 @@ export async function getShipmentItems(shipmentId) {
 
 // The highest numeric LR number used so far (0 if none). Non-numeric parse to NaN.
 export async function getCurrentMaxLRNumber() {
-  const rows = unwrap(await supabase.from('lr_entries').select('lr_number')) || []
+  let q = supabase.from('lr_entries').select('lr_number')
+  const bid = currentBranchId()
+  if (bid != null) q = q.eq('branch_id', bid)
+  const rows = unwrap(await q) || []
   let maxN = 0
   for (const r of rows) {
     const n = parseInt(String(r.lr_number), 10)
@@ -315,18 +326,18 @@ export async function addLREntryWithItems({
   const lrNumber = unwrap(await supabase.rpc('next_lr_number'))
   const itemSummary = (itemsList || []).map(i => `${i.itemName} (x${i.quantity})`).join(', ')
 
-  const inserted = unwrap(await supabase.from('lr_entries').insert({
+  const inserted = unwrap(await supabase.from('lr_entries').insert(withBranch({
     lr_number: lrNumber, date, from_city: fromCity, to_city: toCity,
     consignor, consignor_phone: consignorPhone || '', consignor_address: consignorAddress || '', consignor_id: consignorId || null,
     consignee, consignee_phone: consigneePhone || '', consignee_address: consigneeAddress || '', consignee_id: consigneeId || null,
     items: itemSummary, freight: freight || 0,
     b_charge: bCharge || 0, hamali: hamali || 0, pickup: pickup || 0, delivery: delivery || 0, total_amount: totalAmount || 0,
     advance_paid: advancePaid || 0, balance_due: balanceDue || 0, payment_type: paymentType,
-  }).select('id'))
+  })).select('id'))
   const shipmentId = inserted?.[0]?.id
 
   if (shipmentId && itemsList && itemsList.length > 0) {
-    const itemRows = itemsList.map(item => ({
+    const itemRows = itemsList.map(item => withBranch({
       shipment_id: shipmentId,
       item_name: item.itemName,
       quantity: item.quantity || 1,
@@ -367,7 +378,7 @@ export async function updateLREntryWithItems(id, {
   // Replace item rows wholesale.
   unwrap(await supabase.from('shipment_items').delete().eq('shipment_id', id))
   if (itemsList && itemsList.length > 0) {
-    unwrap(await supabase.from('shipment_items').insert(itemsList.map(item => ({
+    unwrap(await supabase.from('shipment_items').insert(itemsList.map(item => withBranch({
       shipment_id: id,
       item_name: item.itemName,
       quantity: item.quantity || 1,
@@ -389,9 +400,9 @@ export async function getVehicles() {
 }
 
 export async function addVehicle({ vehicleNumber, vehicleType, model, capacity, ownership = 'Owned' }) {
-  unwrap(await supabase.from('vehicles').insert({
+  unwrap(await supabase.from('vehicles').insert(withBranch({
     vehicle_number: vehicleNumber, vehicle_type: vehicleType, model: model || '', capacity: capacity || '', ownership,
-  }))
+  })))
   return getVehicles()
 }
 
@@ -414,10 +425,10 @@ export async function getMaintenanceLogs() {
 }
 
 export async function addMaintenanceLog({ vehicleNumber, serviceType, serviceDate, cost, odometer, nextServiceDate, notes }) {
-  unwrap(await supabase.from('maintenance_logs').insert({
+  unwrap(await supabase.from('maintenance_logs').insert(withBranch({
     vehicle_number: vehicleNumber, service_type: serviceType || 'General Service', service_date: serviceDate,
     cost: Number(cost) || 0, odometer: Number(odometer) || 0, next_service_date: nextServiceDate || '', notes: notes || '',
-  }))
+  })))
   return getMaintenanceLogs()
 }
 
@@ -427,9 +438,9 @@ export async function getDrivers() {
 }
 
 export async function addDriver({ name, phone, address, vehicleNumber }) {
-  unwrap(await supabase.from('drivers').insert({
+  unwrap(await supabase.from('drivers').insert(withBranch({
     name, phone: phone || '', address: address || '', vehicle_number: vehicleNumber || '',
-  }))
+  })))
   return getDrivers()
 }
 
@@ -477,15 +488,15 @@ export async function getChallanBilties(challanId) {
 
 export async function addChallan({ manifestDate, vehicleNumber, driverName, driverPhone, fromCentre, toCentre, lrIds }) {
   const challanNumber = unwrap(await supabase.rpc('next_challan_number'))
-  const inserted = unwrap(await supabase.from('challans').insert({
+  const inserted = unwrap(await supabase.from('challans').insert(withBranch({
     challan_number: challanNumber, manifest_date: manifestDate || '', vehicle_number: vehicleNumber || '',
     driver_name: driverName || '', driver_phone: driverPhone || '', from_centre: fromCentre || '', to_centre: toCentre || '',
-  }).select('id'))
+  })).select('id'))
   const challanId = inserted?.[0]?.id
   if (challanId && lrIds && lrIds.length) {
     try {
       unwrap(await supabase.from('challan_items').insert(
-        lrIds.map((lrId, i) => ({ challan_id: challanId, lr_entry_id: lrId, sort_order: i }))
+        lrIds.map((lrId, i) => withBranch({ challan_id: challanId, lr_entry_id: lrId, sort_order: i }))
       ))
     } catch (err) {
       await supabase.from('challans').delete().eq('id', challanId)
@@ -503,7 +514,7 @@ export async function updateChallan(id, { manifestDate, vehicleNumber, driverNam
   unwrap(await supabase.from('challan_items').delete().eq('challan_id', id))
   if (lrIds && lrIds.length) {
     unwrap(await supabase.from('challan_items').insert(
-      lrIds.map((lrId, i) => ({ challan_id: id, lr_entry_id: lrId, sort_order: i }))
+      lrIds.map((lrId, i) => withBranch({ challan_id: id, lr_entry_id: lrId, sort_order: i }))
     ))
   }
   return getChallans()
@@ -522,9 +533,9 @@ export async function getVendors() {
 }
 
 export async function addVendor({ name, serviceType, phone, city, address, gstin }) {
-  unwrap(await supabase.from('vendors').insert({
+  unwrap(await supabase.from('vendors').insert(withBranch({
     name, service_type: serviceType || '', phone: phone || '', city: city || '', address: address || '', gstin: gstin || '',
-  }))
+  })))
   return getVendors()
 }
 
@@ -543,7 +554,12 @@ export async function deleteVendor(id) {
 // ── App Settings (company branding etc.) ──────────────
 // Each setting is one JSON blob stored under a key in app_settings.
 async function getSetting(key) {
-  const rows = unwrap(await supabase.from('app_settings').select('value').eq('key', key)) || []
+  // RLS already restricts rows to the caller's branch; filter by branch too so
+  // an admin (who can read all branches) still gets THEIR branch's setting.
+  let q = supabase.from('app_settings').select('value').eq('key', key)
+  const bid = currentBranchId()
+  if (bid != null) q = q.eq('branch_id', bid)
+  const rows = unwrap(await q) || []
   if (rows[0]?.value) {
     try { return JSON.parse(rows[0].value) } catch (e) { /* corrupt */ }
   }
@@ -551,7 +567,10 @@ async function getSetting(key) {
 }
 
 async function saveSetting(key, obj) {
-  unwrap(await supabase.from('app_settings').upsert({ key, value: JSON.stringify(obj || {}) }, { onConflict: 'key' }))
+  unwrap(await supabase.from('app_settings').upsert(
+    withBranch({ key, value: JSON.stringify(obj || {}) }),
+    { onConflict: 'branch_id,key' }
+  ))
 }
 
 export async function getCompanySettings() {
@@ -658,7 +677,7 @@ export async function getStatement(id) {
 
 export async function addStatement({ createdDate, partyName, partyRole, periodLabel, totalBills, totalPackages, totalAmount, biltyIds }) {
   const statementNumber = unwrap(await supabase.rpc('next_statement_number'))
-  unwrap(await supabase.from('statements').insert({
+  unwrap(await supabase.from('statements').insert(withBranch({
     statement_number: statementNumber,
     created_date: createdDate || todayISO(),
     party_name: partyName || 'All Parties',
@@ -668,7 +687,7 @@ export async function addStatement({ createdDate, partyName, partyRole, periodLa
     total_packages: totalPackages || 0,
     total_amount: totalAmount || 0,
     bilty_ids: biltyIds || [],
-  }))
+  })))
   return statementNumber
 }
 

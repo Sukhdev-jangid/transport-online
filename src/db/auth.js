@@ -70,6 +70,12 @@ export async function changePassword(currentPassword, newPassword) {
   return { ok: true }
 }
 
+// The signed-in user's email (null if signed out).
+export async function getEmail() {
+  const { data } = await supabase.auth.getUser()
+  return data?.user?.email || null
+}
+
 // Sign out the current user.
 export async function signOut() {
   await supabase.auth.signOut()
