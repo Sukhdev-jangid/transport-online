@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FileText, Users, Truck,
   Map, Wrench, Warehouse,
   BookUser, Tag, Settings, ClipboardList, FileSpreadsheet,
-  UserCog, Building2, UserCircle
+  UserCog, Building2, UserCircle, BarChart3
 } from 'lucide-react'
 import { useRole } from '../context/RoleContext'
 
@@ -48,6 +48,7 @@ const sections = [
     label: 'Administration',
     roles: ['admin', 'sub_admin'],
     items: [
+      { to: '/all-branches', icon: BarChart3, label: 'All Branches Report', roles: ['admin'] },
       { to: '/users', icon: UserCog, label: 'User Management', roles: ['admin', 'sub_admin'] },
       { to: '/branches', icon: Building2, label: 'Branches', roles: ['admin'] },
     ],

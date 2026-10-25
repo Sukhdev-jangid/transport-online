@@ -23,6 +23,7 @@ import Branches from './pages/Branches'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
 import BranchGate from './components/BranchGate'
+import AllBranchesReport from './pages/AllBranchesReport'
 import { initDatabase } from './db/database'
 import { getSession, onAuthChange, signOut } from './db/auth'
 import { RoleProvider, useRole } from './context/RoleContext'
@@ -170,6 +171,10 @@ function AuthedApp({ location, saveError, setSaveError, onLock }) {
           {/* Everyone can see & edit their own profile / password. Not branch-
               specific, so NOT gated. */}
           <Route path="/profile" element={<Profile />} />
+
+          {/* Admin-only cross-branch report. NOT gated — it is meant for the
+              "All Branches" view and shows every branch at once. */}
+          {canManageBranches && <Route path="/all-branches" element={<AllBranchesReport />} />}
 
           {/* User & branch management — admin needs these on "All Branches" to
               create branches in the first place, so they are NOT gated. */}

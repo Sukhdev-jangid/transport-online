@@ -695,6 +695,65 @@ export async function getDashboardStats() {
   return stats
 }
 
+// ── All-Branches Report (admin only) ──────────────────
+// A cross-branch overview: one row of totals per branch plus a combined grand
+// total. Unlike every other read in this module, it does NOT scope to the
+// active branch — it pulls EVERY branch's rows in one go (admin RLS allows it)
+// and groups them in JS. Used by the admin "All Branches" report page.
+export async function getAllBranchesReport() {
+  const num = (v) => Number(v) || 0
+  const revenue = (e) => (num(e.total_amount) > 0 ? num(e.total_amount) : num(e.freight))
+
+  // Pull everything (no branch filter) in parallel.
+  const [branches, lrs, customers, challans] = await Promise.all([
+    unwrap(await supabase.from('branches').select('*').order('name')),
+    unwrap(await supabase.from('lr_entries').select('branch_id, total_amount, freight, balance_due, payment_type')),
+    unwrap(await supabase.from('customers').select('branch_id')),
+    unwrap(await supabase.from('challans').select('branch_id')),
+  ].map(p => p || []))
+
+  // Seed one bucket per branch so even branches with no data show up.
+  const blank = () => ({
+    totalLR: 0, paidLR: 0, toPayLR: 0, tbbLR: 0,
+    totalRevenue: 0, paidAmount: 0, tbbAmount: 0, balanceDue: 0,
+    totalCustomers: 0, totalChallans: 0,
+  })
+  const byId = new Map()
+  for (const b of (branches || [])) {
+    byId.set(b.id, { branchId: b.id, branchName: b.name, branchCode: b.code || '', ...blank() })
+  }
+  // Fallback bucket for rows whose branch was deleted / is unknown.
+  const other = () => {
+    if (!byId.has(null)) byId.set(null, { branchId: null, branchName: 'Unassigned', branchCode: '', ...blank() })
+    return byId.get(null)
+  }
+  const bucket = (bid) => byId.get(bid) || other()
+
+  for (const e of (lrs || [])) {
+    const s = bucket(e.branch_id)
+    s.totalLR++
+    s.totalRevenue += revenue(e)
+    s.balanceDue += num(e.balance_due)
+    if (e.payment_type === 'Paid') { s.paidLR++; s.paidAmount += revenue(e) }
+    else if (e.payment_type === 'ToPay') { s.toPayLR++ }
+    else if (e.payment_type === 'TBB') { s.tbbLR++; s.tbbAmount += revenue(e) }
+  }
+  for (const c of (customers || [])) bucket(c.branch_id).totalCustomers++
+  for (const c of (challans || [])) bucket(c.branch_id).totalChallans++
+
+  const perBranch = Array.from(byId.values())
+    // Keep real branches first (sorted by name); drop an empty "Unassigned".
+    .filter(r => r.branchId !== null || r.totalLR > 0 || r.totalCustomers > 0 || r.totalChallans > 0)
+
+  // Combined grand total across every branch.
+  const total = perBranch.reduce((t, r) => {
+    for (const k of Object.keys(blank())) t[k] += r[k]
+    return t
+  }, blank())
+
+  return { perBranch, total, branchCount: (branches || []).length }
+}
+
 // ── Statements ────────────────────────────────────────
 export async function peekNextStatementNumber() {
   return unwrap(await supabase.rpc('next_statement_number', { p_branch_id: targetBranchId() }))
