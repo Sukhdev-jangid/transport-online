@@ -53,7 +53,7 @@ export async function deleteBranch(id) {
 export async function getUsers() {
   const rows = unwrap(await supabase
     .from('profiles')
-    .select('id, full_name, role, branch_id, is_active, created_at, branches(name, code)')
+    .select('id, full_name, email, role, branch_id, is_active, created_at, branches(name, code)')
     .order('created_at', { ascending: false })) || []
   return rows.map(r => ({
     ...r,

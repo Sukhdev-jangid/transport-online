@@ -201,7 +201,7 @@ export default function UsersPage() {
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  {['#','Name','Role','Branch','Status','Actions'].map(h => (
+                  {['#','Name','Email','Role','Branch','Status','Actions'].map(h => (
                     <th key={h} className="text-left px-3.5 py-2.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">{h}</th>
                   ))}
                 </tr>
@@ -214,6 +214,7 @@ export default function UsersPage() {
                       {u.full_name || '—'}
                       {isSelf(u) && <span className="ml-1.5 text-[10px] text-slate-400">(you)</span>}
                     </td>
+                    <td className="px-3.5 py-2.5 text-slate-600">{u.email || '—'}</td>
                     <td className="px-3.5 py-2.5">
                       <span className={`badge ${ROLE_BADGE[u.role] || 'badge-gray'} inline-flex items-center gap-1`}>
                         {u.role === 'admin' && <ShieldCheck size={11} />}{ROLE_LABELS[u.role] || u.role}

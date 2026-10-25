@@ -97,6 +97,7 @@ Deno.serve(async (req) => {
   const { error: insErr } = await admin.from('profiles').insert({
     id: created.user.id,
     full_name: fullName,
+    email,
     role,
     branch_id: branchId,
     is_active: true,
