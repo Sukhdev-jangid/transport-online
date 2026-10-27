@@ -4,6 +4,7 @@ import { COMPANY } from '../config/company'
 import { fmtDate } from '../utils/date'
 import { toPayTotal } from '../utils/billing'
 import { packagesFromSummary, goodsFromSummary } from '../utils/items'
+import { dirLabel } from '../utils/crossing'
 
 const num = (v) => Number(v) || 0
 const money = (v) => '₹' + num(v).toLocaleString('en-IN')
@@ -254,6 +255,45 @@ export default function ChallanDocument({ challan = {}, id = 'printableChallan' 
             {/* ── Footer Section (only on the last page) ── */}
             {page.isLast && (
               <div>
+                {/* ── Crossing goods on this trip (only if any are linked) ── */}
+                {(challan.crossings || []).length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1.5" style={{ color: ACCENT }}>
+                      Crossing Goods on this Trip
+                    </div>
+                    <div className="rounded-lg overflow-hidden border border-slate-200">
+                      <table className="w-full border-collapse text-[11.5px]">
+                        <thead>
+                          <tr style={{ background: INK }} className="text-white">
+                            <th className="px-2.5 py-1.5 text-center font-semibold w-[42px] text-[10px] uppercase border-r border-white/20">Sr</th>
+                            <th className="px-2.5 py-1.5 text-center font-semibold w-[70px] text-[10px] uppercase border-r border-white/20">Cr No</th>
+                            <th className="px-2.5 py-1.5 text-center font-semibold w-[60px] text-[10px] uppercase border-r border-white/20">Dir</th>
+                            <th className="px-3 py-1.5 text-left font-semibold text-[10px] uppercase border-r border-white/20">Transporter</th>
+                            <th className="px-3 py-1.5 text-left font-semibold text-[10px] uppercase border-r border-white/20">GR No</th>
+                            <th className="px-3 py-1.5 text-left font-semibold text-[10px] uppercase border-r border-white/20">Marka</th>
+                            <th className="px-3 py-1.5 text-left font-semibold text-[10px] uppercase border-r border-white/20">Route</th>
+                            <th className="px-2.5 py-1.5 text-center font-semibold w-[50px] text-[10px] uppercase">Pkgs</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(challan.crossings || []).map((c, i) => (
+                            <tr key={c.id} className={i % 2 ? 'bg-slate-50' : 'bg-white'}>
+                              <td className="px-2.5 py-1.5 text-center text-slate-500 border-t border-r border-slate-200">{i + 1}</td>
+                              <td className="px-2.5 py-1.5 text-center font-bold border-t border-r border-slate-200" style={{ color: ACCENT }}>{c.crossing_no}</td>
+                              <td className="px-2.5 py-1.5 text-center text-slate-700 border-t border-r border-slate-200">{dirLabel(c.direction)}</td>
+                              <td className="px-3 py-1.5 text-slate-800 border-t border-r border-slate-200 font-medium">{c.transporters?.name || '—'}</td>
+                              <td className="px-3 py-1.5 text-slate-700 border-t border-r border-slate-200">{c.gr_no || '—'}</td>
+                              <td className="px-3 py-1.5 text-slate-700 border-t border-r border-slate-200">{c.pvt_marka || '—'}</td>
+                              <td className="px-3 py-1.5 text-slate-600 border-t border-r border-slate-200 whitespace-nowrap">{c.from_station} → {c.to_station}</td>
+                              <td className="px-2.5 py-1.5 text-center text-slate-700 border-t border-slate-200 tabular-nums">{c.packages || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary totals */}
                 <div className="flex justify-end mt-4">
                   <div className="flex items-stretch gap-3">

@@ -24,6 +24,10 @@ import Profile from './pages/Profile'
 import Login from './pages/Login'
 import BranchGate from './components/BranchGate'
 import AllBranchesReport from './pages/AllBranchesReport'
+import Transporters from './pages/Transporters'
+import Crossings from './pages/Crossings'
+import TransporterAccounts from './pages/TransporterAccounts'
+import TransporterAccount from './pages/TransporterAccount'
 import { initDatabase } from './db/database'
 import { getSession, onAuthChange, signOut } from './db/auth'
 import { RoleProvider, useRole } from './context/RoleContext'
@@ -156,6 +160,14 @@ function AuthedApp({ location, saveError, setSaveError, onLock }) {
           <Route path="/bilty/:lrNumber" element={<BranchGate><BillDetail /></BranchGate>} />
           <Route path="/challans" element={<BranchGate><Challans /></BranchGate>} />
           <Route path="/statements" element={<BranchGate><Statements /></BranchGate>} />
+
+          {/* Crossing module — booking is open to everyone (staff can enter a
+              crossing); the account detail page gates payments to admin/sub-admin
+              internally. All branch-specific, so wrapped in BranchGate. */}
+          <Route path="/crossings" element={<BranchGate><Crossings /></BranchGate>} />
+          <Route path="/transporters" element={<BranchGate><Transporters /></BranchGate>} />
+          <Route path="/transporter-accounts" element={<BranchGate><TransporterAccounts /></BranchGate>} />
+          <Route path="/transporter-accounts/:id" element={<BranchGate><TransporterAccount /></BranchGate>} />
 
           {/* Masters & settings — hidden from staff (booking-only). */}
           {!isStaff && <Route path="/item-rates" element={<BranchGate><ItemRates /></BranchGate>} />}

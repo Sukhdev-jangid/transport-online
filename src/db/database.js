@@ -11,6 +11,7 @@ import { supabase } from './supabaseClient'
 import { applyCompanySettings } from '../config/company'
 import { billTotal } from '../utils/billing'
 import { currentBranchId, viewBranchId, settingsBranchId } from './session'
+import { crossingNet, summarizeAccount, money, count, INWARD, OUTWARD } from '../utils/crossing'
 
 // Thrown when an admin tries to create a record while on "All Branches" (no
 // branch chosen). The create pages catch this and show "pick a branch first".
@@ -491,13 +492,17 @@ export async function peekNextChallanNumber() {
 // All challans, newest first, each with its linked bilties resolved live.
 export async function getChallans() {
   const challans = unwrap(await scopeBranch(supabase.from('challans').select('*')).order('id', { ascending: false })) || []
-  return Promise.all(challans.map(async c => ({ ...c, bilties: await getChallanBilties(c.id) })))
+  return Promise.all(challans.map(async c => ({
+    ...c,
+    bilties: await getChallanBilties(c.id),
+    crossings: await getChallanCrossings(c.id),
+  })))
 }
 
 export async function getChallan(id) {
   const rows = unwrap(await supabase.from('challans').select('*').eq('id', id)) || []
   if (!rows[0]) return null
-  return { ...rows[0], bilties: await getChallanBilties(id) }
+  return { ...rows[0], bilties: await getChallanBilties(id), crossings: await getChallanCrossings(id) }
 }
 
 // Resolve the bilties on a challan from the live lr_entries (via the link rows).
@@ -511,6 +516,15 @@ export async function getChallanBilties(challanId) {
   return links
     .filter(l => l.lr_entries)
     .map(l => ({ ...l.lr_entries, sort_order: l.sort_order }))
+}
+
+// Crossings linked to a challan (goods crossed that travel on this trip). Used
+// by the challan print to show a "Crossings" section. Empty for most challans.
+export async function getChallanCrossings(challanId) {
+  return unwrap(await supabase.from('crossings')
+    .select('*, transporters(name)')
+    .eq('challan_id', challanId)
+    .order('id', { ascending: true })) || []
 }
 
 export async function addChallan({ manifestDate, vehicleNumber, driverName, driverPhone, fromCentre, toCentre, lrIds }) {
@@ -790,4 +804,188 @@ export async function addStatement({ createdDate, partyName, partyRole, periodLa
 
 export async function deleteStatement(id) {
   unwrap(await supabase.from('statements').delete().eq('id', id))
+}
+
+// ── Transporters (crossing counterparties) ────────────
+// A separate master from vendors/customers: the OTHER transport companies we
+// hand goods to (outward) or receive goods from (inward). Carries an optional
+// opening balance so a khata started mid-business shows the right total.
+export async function getTransporters() {
+  return unwrap(await scopeBranch(supabase.from('transporters').select('*')).order('name')) || []
+}
+
+export async function addTransporter({ name, phone, city, address, gstin, openingBalance, openingType }) {
+  unwrap(await supabase.from('transporters').insert(withBranch({
+    name: (name || '').trim(),
+    phone: phone || '', city: city || '', address: address || '', gstin: gstin || '',
+    opening_balance: money(openingBalance),
+    // 'payable' = we owe them to start, 'receivable' = they owe us, 'none' = flat.
+    opening_type: openingType || 'none',
+  })))
+  return getTransporters()
+}
+
+export async function updateTransporter(id, { name, phone, city, address, gstin, openingBalance, openingType }) {
+  unwrap(await supabase.from('transporters').update({
+    name: (name || '').trim(),
+    phone: phone || '', city: city || '', address: address || '', gstin: gstin || '',
+    opening_balance: money(openingBalance),
+    opening_type: openingType || 'none',
+  }).eq('id', id))
+  return getTransporters()
+}
+
+export async function deleteTransporter(id) {
+  // Fails if crossings/payments still reference it (FK) — surfaced as an error so
+  // we never orphan a ledger. The UI should warn before calling this.
+  unwrap(await supabase.from('transporters').delete().eq('id', id))
+  return getTransporters()
+}
+
+// ── Crossings (outward payable / inward receivable) ───
+// Server-side atomic number for the target branch + direction, so OUT- and IN-
+// each keep their own per-branch series and two users never collide.
+export async function peekNextCrossingNumber(direction = OUTWARD) {
+  return unwrap(await supabase.rpc('next_crossing_number', {
+    p_branch_id: targetBranchId(), p_direction: direction === INWARD ? INWARD : OUTWARD,
+  }))
+}
+
+export async function getCrossings() {
+  return unwrap(await scopeBranch(supabase.from('crossings').select('*, transporters(name)'))
+    .order('id', { ascending: false })) || []
+}
+
+export async function getCrossing(id) {
+  const rows = unwrap(await supabase.from('crossings').select('*, transporters(name)').eq('id', id)) || []
+  return rows[0] || null
+}
+
+// Normalise a crossing form into a clean DB row: direction fixed, all money
+// clamped ≥ 0, packages a whole count, net computed server-side (never trust the
+// client's number).
+function crossingRow(form) {
+  const direction = form.direction === INWARD ? INWARD : OUTWARD
+  return {
+    direction,
+    crossing_date: form.crossingDate || todayISO(),
+    gr_no: (form.grNo || '').trim(),
+    gr_date: form.grDate || null,
+    challan_no: (form.challanNo || '').trim(),
+    challan_id: Number.isFinite(Number(form.challanId)) && Number(form.challanId) > 0 ? Number(form.challanId) : null,
+    transporter_id: form.transporterId ? Number(form.transporterId) : null,
+    consignor: (form.consignor || '').trim(),
+    consignee: (form.consignee || '').trim(),
+    from_station: (form.fromStation || '').trim(),
+    to_station: (form.toStation || '').trim(),
+    via_station: (form.viaStation || '').trim(),
+    pvt_marka: (form.pvtMarka || '').trim(),
+    packages: count(form.packages),
+    weight: money(form.weight),
+    goods: (form.goods || '').trim(),
+    freight_basis: form.freightBasis || 'topay',
+    lorry_no: (form.lorryNo || '').trim(),
+    driver_name: (form.driverName || '').trim(),
+    driver_phone: form.driverPhone || '',
+    crossing_freight: money(form.crossingFreight),
+    hamali: money(form.hamali),
+    labour: money(form.labour),
+    commission: money(form.commission),
+    mamul: money(form.mamul),
+    bilty_charge: money(form.biltyCharge),
+    other_charges: money(form.otherCharges),
+    other_note: (form.otherNote || '').trim(),
+    kata: money(form.kata),
+    net_amount: crossingNet(form),
+    remarks: (form.remarks || '').trim(),
+  }
+}
+
+export async function addCrossing(form) {
+  const direction = form.direction === INWARD ? INWARD : OUTWARD
+  const crossingNo = unwrap(await supabase.rpc('next_crossing_number', {
+    p_branch_id: targetBranchId(), p_direction: direction,
+  }))
+  unwrap(await supabase.from('crossings').insert(withBranch({
+    crossing_no: crossingNo, ...crossingRow(form),
+  })))
+  return getCrossings()
+}
+
+export async function updateCrossing(id, form) {
+  // Number + branch never change on edit; everything else is replaced.
+  unwrap(await supabase.from('crossings').update(crossingRow(form)).eq('id', id))
+  return getCrossings()
+}
+
+export async function deleteCrossing(id) {
+  unwrap(await supabase.from('crossing_payments').delete().eq('crossing_id', id))
+  unwrap(await supabase.from('crossings').delete().eq('id', id))
+  return getCrossings()
+}
+
+// ── Crossing payments (partial + on-account settlements) ─
+// One row per payment. direction 'pay' = money we gave an outward transporter;
+// 'receive' = money an inward transporter gave us. crossing_id is optional so an
+// on-account payment (not tied to one GR) is allowed — standard trade practice.
+export async function addCrossingPayment({ transporterId, crossingId, direction, amount, payDate, mode, reference }) {
+  unwrap(await supabase.from('crossing_payments').insert(withBranch({
+    transporter_id: Number(transporterId),
+    crossing_id: crossingId ? Number(crossingId) : null,
+    direction: direction === 'receive' ? 'receive' : 'pay',
+    amount: money(amount),
+    pay_date: payDate || todayISO(),
+    mode: mode || 'Cash',
+    reference: (reference || '').trim(),
+  })))
+  return true
+}
+
+export async function getCrossingPayments(transporterId) {
+  return unwrap(await supabase.from('crossing_payments')
+    .select('*').eq('transporter_id', Number(transporterId))
+    .order('pay_date', { ascending: false }).order('id', { ascending: false })) || []
+}
+
+export async function deleteCrossingPayment(id) {
+  unwrap(await supabase.from('crossing_payments').delete().eq('id', id))
+  return true
+}
+
+// One transporter's full account: their row, every crossing, every payment, and
+// the computed summary (payable / receivable / net). Powers the detail page.
+export async function getTransporterAccount(transporterId) {
+  const tid = Number(transporterId)
+  const [tRows, crossings, payments] = await Promise.all([
+    unwrap(await supabase.from('transporters').select('*').eq('id', tid)),
+    unwrap(await supabase.from('crossings').select('*').eq('transporter_id', tid).order('crossing_date', { ascending: false }).order('id', { ascending: false })),
+    getCrossingPayments(tid),
+  ])
+  const transporter = (tRows || [])[0] || null
+  const summary = summarizeAccount(transporter, crossings || [], payments || [])
+  return { transporter, crossings: crossings || [], payments: payments || [], summary }
+}
+
+// Every transporter with their net balance — the accounts list / pending view.
+// Pulls all crossings + payments for the current branch scope in two reads and
+// buckets them in JS (avoids one round-trip per transporter).
+export async function getAllTransporterBalances() {
+  const [transporters, crossings, payments] = await Promise.all([
+    getTransporters(),
+    unwrap(await scopeBranch(supabase.from('crossings').select('transporter_id, direction, net_amount'))),
+    unwrap(await scopeBranch(supabase.from('crossing_payments').select('transporter_id, direction, amount'))),
+  ])
+  const cByT = new Map(), pByT = new Map()
+  for (const c of (crossings || [])) {
+    if (!cByT.has(c.transporter_id)) cByT.set(c.transporter_id, [])
+    cByT.get(c.transporter_id).push(c)
+  }
+  for (const p of (payments || [])) {
+    if (!pByT.has(p.transporter_id)) pByT.set(p.transporter_id, [])
+    pByT.get(p.transporter_id).push(p)
+  }
+  return (transporters || []).map(t => ({
+    ...t,
+    summary: summarizeAccount(t, cByT.get(t.id) || [], pByT.get(t.id) || []),
+  }))
 }

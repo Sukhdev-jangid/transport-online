@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FileText, Users, Truck,
   Map, Wrench, Warehouse,
   BookUser, Tag, Settings, ClipboardList, FileSpreadsheet,
-  UserCog, Building2, UserCircle, BarChart3
+  UserCog, Building2, UserCircle, BarChart3, ArrowLeftRight, Wallet
 } from 'lucide-react'
 import { useRole } from '../context/RoleContext'
 
@@ -26,6 +26,14 @@ const sections = [
       { to: '/statements', icon: FileSpreadsheet, label: 'Statements' },
       { to: '/item-rates', icon: Tag, label: 'Item Rates Master', roles: ['admin', 'sub_admin'] },
       { to: '/locations', icon: Warehouse, label: 'Locations', roles: ['admin', 'sub_admin'] },
+    ],
+  },
+  {
+    label: 'Crossing',
+    items: [
+      { to: '/crossings', icon: ArrowLeftRight, label: 'Crossing Entry' },
+      { to: '/transporters', icon: Truck, label: 'Transporters' },
+      { to: '/transporter-accounts', icon: Wallet, label: 'Transporter Accounts' },
     ],
   },
   {
