@@ -768,7 +768,7 @@ export async function getStatement(id) {
   return rows[0] || null
 }
 
-export async function addStatement({ createdDate, partyName, partyRole, periodLabel, totalBills, totalPackages, totalAmount, biltyIds }) {
+export async function addStatement({ createdDate, partyName, partyRole, periodLabel, totalBills, totalPackages, totalAmount, biltyIds, billsSnapshot }) {
   const statementNumber = unwrap(await supabase.rpc('next_statement_number', { p_branch_id: targetBranchId() }))
   unwrap(await supabase.from('statements').insert(withBranch({
     statement_number: statementNumber,
@@ -780,6 +780,10 @@ export async function addStatement({ createdDate, partyName, partyRole, periodLa
     total_packages: totalPackages || 0,
     total_amount: totalAmount || 0,
     bilty_ids: biltyIds || [],
+    // FROZEN snapshot of exactly the rows that were printed at save time. A sent
+    // statement must never change if a bill is later edited, deleted, or its
+    // payment type changes — history always reprints from this, not live bills.
+    bills_snapshot: billsSnapshot || [],
   })))
   return statementNumber
 }

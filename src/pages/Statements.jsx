@@ -10,6 +10,7 @@ import { fmtDate } from '../utils/date'
 import { downloadStatementPdf } from '../utils/statementPdf'
 import { billTotal } from '../utils/billing'
 import { playSound } from '../utils/sound'
+import { packagesFromSummary, goodsFromSummary } from '../utils/items'
 import StatementDocument from '../components/StatementDocument'
 import StatementInvoiceModal from '../components/StatementInvoiceModal'
 import Pagination from '../components/Pagination'
@@ -18,34 +19,9 @@ import Select from '../components/Select'
 
 const num = (v) => Number(v) || 0
 
-// Calculate total packages / pieces in an LR entry
-const billPackages = (e) => {
-  const items = e?.items
-  if (Array.isArray(items)) {
-    const total = items.reduce((s, it) => s + num(it.quantity || it.pkgs || it.count || it.qty || it.packages || it.pieces), 0)
-    return total || items.length
-  }
-  const s = String(items || '')
-  if (!s.trim()) return 0
-  try {
-    const parsed = JSON.parse(s)
-    if (Array.isArray(parsed)) {
-      const total = parsed.reduce((s, it) => s + num(it.quantity || it.pkgs || it.count || it.qty || it.packages || it.pieces), 0)
-      return total || parsed.length
-    }
-  } catch (_) {}
-
-  // Match (xN) or (x N) like "Gas Tank (x2), Drum (x3)" -> 2 + 3 = 5
-  const m = [...s.matchAll(/\(x\s*(\d+)\)/gi)]
-  if (m.length) return m.reduce((n, x) => n + (Number(x[1]) || 0), 0)
-
-  // Match numbers before units: "5 Box", "10 Bags", "3 Nos", "4 Pcs"
-  const m2 = [...s.matchAll(/(\d+)\s*(?:nos|pcs|boxes|box|bags|bag|drums|drum|pkgs|pkg|cartons|ctn|parcels|items)/gi)]
-  if (m2.length) return m2.reduce((n, x) => n + (Number(x[1]) || 0), 0)
-
-  // Fallback: count comma-separated item names
-  return s.trim() ? s.split(',').filter(t => t.trim()).length : 0
-}
+// Total packages in an LR entry — via the SHARED counter so the statement
+// agrees with the bill and challan for the same bill.
+const billPackages = (e) => packagesFromSummary(e?.items)
 
 const PAYMENT_OPTIONS = [
   { value: 'all', label: 'All Payment Types' },
@@ -279,7 +255,9 @@ export default function Statements() {
       srNo: i + 1,
       lrNumber: b.lr_number,
       date: b.date,
-      goods: typeof b.items === 'string' ? b.items : Array.isArray(b.items) ? b.items.map(it => it.name || it.item_name).filter(Boolean).join(', ') : 'Goods',
+      goods: Array.isArray(b.items)
+        ? b.items.map(it => it.name || it.item_name).filter(Boolean).join(', ')
+        : goodsFromSummary(b.items),
       packages: billPackages(b),
       amount: billTotal(b)
     }))
@@ -305,7 +283,10 @@ export default function Statements() {
         totalBills: selectedBills.length,
         totalPackages: totalPkgsSum,
         totalAmount: totalAmountSum,
-        biltyIds: selectedBills.map(b => b.id)
+        biltyIds: selectedBills.map(b => b.id),
+        // Freeze the exact printed rows now, so this statement never changes if
+        // a bill is later edited or deleted.
+        billsSnapshot: buildDocBills(selectedBills),
       })
       showToast(`✓ Statement ${stmtNum} saved to database!`)
       playSound(true)
@@ -365,31 +346,35 @@ export default function Statements() {
     try { return JSON.parse(val || '[]') } catch (_) { return [] }
   }
 
-  // Preview / Print saved statement from history
-  const previewSavedStatement = (stmt) => {
+  // A saved statement is a SNAPSHOT, not a live query. Reprint from the frozen
+  // bills_snapshot taken at save time. Only older rows that have no snapshot
+  // fall back to rebuilding from live bills (legacy behaviour).
+  const savedBills = (stmt) => {
+    const snap = stmt.bills_snapshot
+    if (Array.isArray(snap) && snap.length > 0) return snap
     const ids = parseBiltyIds(stmt.bilty_ids)
     const linkedBills = entries.filter(e => ids.includes(e.id))
       .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.lr_number || '').localeCompare(b.lr_number || ''))
+    return buildDocBills(linkedBills)
+  }
 
+  // Preview / Print saved statement from history
+  const previewSavedStatement = (stmt) => {
     setPreviewStmt({
       statementNumber: stmt.statement_number,
       partyName: stmt.party_name,
       partyRole: stmt.party_role,
       periodLabel: stmt.period_label,
-      bills: buildDocBills(linkedBills.length > 0 ? linkedBills : [])
+      bills: savedBills(stmt)
     })
   }
 
   const downloadSavedStatementPdf = async (stmt) => {
-    const ids = parseBiltyIds(stmt.bilty_ids)
-    const linkedBills = entries.filter(e => ids.includes(e.id))
-      .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.lr_number || '').localeCompare(b.lr_number || ''))
-
     await downloadStatementPdf({
       partyName: stmt.party_name,
       partyRole: stmt.party_role,
       periodLabel: stmt.period_label,
-      bills: buildDocBills(linkedBills)
+      bills: savedBills(stmt)
     })
   }
 

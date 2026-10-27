@@ -2,6 +2,7 @@ import { Phone } from 'lucide-react'
 import { COMPANY } from '../config/company'
 import { fmtDate } from '../utils/date'
 import { billTotal } from '../utils/billing'
+import { itemsPackages, packagesFromSummary } from '../utils/items'
 
 const num = (v) => Number(v) || 0
 
@@ -29,9 +30,12 @@ export default function BiltyDocument({ lrData, id = 'printableBilty', hidePrice
   // Anything that isn't Paid or TBB is treated as "To Pay" (the default).
   const isToPay = !isPaid && !isTBB
   const grandTotal = billTotal(lrData)
+  // Package count via the shared counter so the bill agrees with the challan
+  // and statement for the same bill. Structured item list first; else fall back
+  // to the summary string / stored package field for older records.
   const totalPackages =
-    items.reduce((s, i) => s + (Number(i.quantity) || 0), 0) ||
-    (lrData.itemsList || []).reduce((s, i) => s + (Number(i.quantity) || 0), 0) ||
+    itemsPackages(lrData.itemsList) ||
+    packagesFromSummary(lrData.items) ||
     (Number(lrData.packages) || (Number(lrData.totalPackages) || ''))
 
   // A single Paid / To Pay / TBB checkbox, reused three times.
@@ -167,7 +171,7 @@ export default function BiltyDocument({ lrData, id = 'printableBilty', hidePrice
             ) : (
               <div className="grid grid-cols-[88px_1fr_90px] text-[15px]">
                 <div className="px-2 py-1 border-r border-slate-400 text-center">
-                  {lrData.itemsList?.reduce((s, i) => s + (Number(i.quantity) || 0), 0) || ''}
+                  {totalPackages || ''}
                 </div>
                 <div className="px-2 py-1 border-r border-slate-400">{goods}</div>
                 <div className="px-2 py-1" />

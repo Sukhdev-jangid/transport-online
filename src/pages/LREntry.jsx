@@ -14,6 +14,7 @@ import {
 import BiltyInvoiceModal from '../components/BiltyInvoiceModal'
 import { useRole } from '../context/RoleContext'
 import { isValidPhone } from '../utils/validation'
+import { normalizeItems, itemsFreight, itemsPackages } from '../utils/items'
 import PhoneInput from '../components/PhoneInput'
 import Select from '../components/Select'
 import CityAutocomplete from '../components/CityAutocomplete'
@@ -275,11 +276,19 @@ export default function LREntry() {
   }
 
   const handleQtyWeightChange = (index, field, value) => {
+    // Clamp as the user types: quantity -> whole >= 0, rate -> >= 0. Empty
+    // string is allowed so the field can be cleared. normalizeItem() is the
+    // final safety net at save/compute; this keeps the UI correct immediately.
+    let clean = value
+    if (value !== '') {
+      if (field === 'quantity') clean = String(Math.max(0, Math.floor(Number(value) || 0)))
+      else if (field === 'rate') clean = String(Math.max(0, Number(value) || 0))
+    }
     setItemsList(prev => prev.map((row, i) => {
       if (i !== index) return row
-      const updated = { ...row, [field]: value }
-      const qty = Number(field === 'quantity' ? value : row.quantity) || 0
-      const rate = Number(field === 'rate' ? value : row.rate) || 0
+      const updated = { ...row, [field]: clean }
+      const qty = Number(field === 'quantity' ? clean : row.quantity) || 0
+      const rate = Number(field === 'rate' ? clean : row.rate) || 0
       updated.totalAmount = qty * rate
       return updated
     }))
@@ -329,9 +338,11 @@ export default function LREntry() {
     }
   }
 
-  // Totals calculation
-  const totalFreight = itemsList.reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0)
-  const totalPackages = itemsList.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+  // Totals calculation — via the shared normalizer so blank-name ghost rows
+  // (which may carry a stale totalAmount) never inflate freight or package
+  // count. totalAmount is recomputed from qty*rate, never trusted raw.
+  const totalFreight = itemsFreight(itemsList)
+  const totalPackages = itemsPackages(itemsList)
   const bChargeNum = Number(form.bCharge) || 0
   const hamaliNum = Number(form.hamali) || 0
   const pickupNum = Number(form.pickup) || 0
@@ -447,18 +458,10 @@ export default function LREntry() {
       return
     }
 
-    const validItems = itemsList
-      .filter(it => it.itemName?.trim())
-      .map(it => {
-        const quantity = Math.max(1, Math.floor(Number(it.quantity) || 1))
-        const rate = Number(it.rate) || 0
-        return {
-          ...it,
-          quantity,
-          rate,
-          totalAmount: quantity * rate,
-        }
-      })
+    // Same normalizer the form totals use — drops blank-name rows, clamps
+    // qty/rate, recomputes totalAmount. Save payload therefore always matches
+    // what is displayed and printed (no ghost-row freight mismatch).
+    const validItems = normalizeItems(itemsList)
     if (validItems.length === 0) {
       showToast('Please add at least one item (item name is required).', 'error')
       return

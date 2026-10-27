@@ -3,20 +3,15 @@ import { Phone, MapPin, ArrowRight } from 'lucide-react'
 import { COMPANY } from '../config/company'
 import { fmtDate } from '../utils/date'
 import { toPayTotal } from '../utils/billing'
+import { packagesFromSummary, goodsFromSummary } from '../utils/items'
 
 const num = (v) => Number(v) || 0
 const money = (v) => '₹' + num(v).toLocaleString('en-IN')
 
-// Total packages from a bilty's item summary string
-const qtyOf = (items) => {
-  const s = String(items || '')
-  const m = [...s.matchAll(/\(x\s*(\d+)\)/gi)]
-  if (m.length) return m.reduce((n, x) => n + (Number(x[1]) || 0), 0)
-  return s.trim() ? s.split(',').filter(t => t.trim()).length : 0
-}
-
-// Strip quantity markers for clean goods text
-const goodsOf = (items) => String(items || '').replace(/\s*\(x\s*\d+\)/gi, '').trim()
+// Packages + goods come from the SHARED counter so a bill shows the same
+// package count here, on the bilty, and on the statement (no divergence).
+const qtyOf = packagesFromSummary
+const goodsOf = goodsFromSummary
 
 // Paginate rows across distinct A4 sheets
 function paginateChallanRows(rows) {

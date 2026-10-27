@@ -2,30 +2,20 @@ import React from 'react'
 import { Phone, MapPin } from 'lucide-react'
 import { COMPANY } from '../config/company'
 import { fmtDate } from '../utils/date'
+import { packagesFromSummary } from '../utils/items'
 
 const num = (v) => Number(v) || 0
 const money = (v) => '₹' + num(v).toLocaleString('en-IN')
 
-// Extract full piece/package count from a bill
+// Package count for one statement row. A row built by buildDocBills already
+// carries a frozen `packages`; trust it. Otherwise fall back to the SHARED
+// counter on the goods/items text — same rule as every other screen.
 const getPkgs = (b) => {
   if (b.packages !== undefined && b.packages !== null && b.packages !== '') {
     const p = num(b.packages)
     if (p > 0) return p
   }
-  const s = String(b.goods || b.items || '')
-  if (!s.trim()) return 0
-  try {
-    const parsed = JSON.parse(s)
-    if (Array.isArray(parsed)) {
-      const total = parsed.reduce((n, it) => n + num(it.quantity || it.pkgs || it.count || it.qty || it.packages || it.pieces), 0)
-      if (total > 0) return total
-    }
-  } catch (_) {}
-  const m = [...s.matchAll(/\(x\s*(\d+)\)/gi)]
-  if (m.length) return m.reduce((n, x) => n + (Number(x[1]) || 0), 0)
-  const m2 = [...s.matchAll(/(\d+)\s*(?:nos|pcs|boxes|box|bags|bag|drums|drum|pkgs|pkg|cartons|ctn|parcels|items)/gi)]
-  if (m2.length) return m2.reduce((n, x) => n + (Number(x[1]) || 0), 0)
-  return s.trim() ? s.split(',').filter(t => t.trim()).length : 0
+  return packagesFromSummary(b.goods || b.items)
 }
 
 // Paginate statement bills across distinct A4 sheets
