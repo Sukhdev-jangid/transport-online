@@ -91,7 +91,7 @@ export default function Sidebar() {
 
   return (
     <aside className="bg-white border-r border-slate-200 flex flex-col overflow-x-hidden">
-      <div className="flex-1 overflow-y-auto pb-2">
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-2">
         {visibleSections.map((section, idx) => (
           <div key={section.label} className={`px-2.5 ${idx === 0 ? 'pt-2.5' : 'pt-2'} pb-0.5`}>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 mb-1">
