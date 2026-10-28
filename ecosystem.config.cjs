@@ -19,11 +19,15 @@ module.exports = {
   apps: [
     {
       name: 'transport-web',
-      // `serve` se dist/ folder serve karte hain.
+      // `serve` se dist/ folder serve karte hain. PM2 ko `serve` seedha script
+      // ki tarah dena kabhi-kabhi fail hota hai (PATH me na mile), isliye hum
+      // `npx serve` chalate hain — yeh global ya local, dono me se jo mile use
+      // le leta hai.
       //   -s  => SPA mode (har route index.html par bhejo, React Router ke liye)
       //   -l  => listen port
-      script: 'serve',
-      args: '-s dist -l 5175',
+      script: 'npx',
+      args: 'serve -s dist -l 5175',
+      interpreter: 'none',
       cwd: __dirname,
       exec_mode: 'fork',
       instances: 1,
