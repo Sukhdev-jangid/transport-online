@@ -53,8 +53,11 @@ const sections = [
     ],
   },
   {
+    // Admin manages branches/users/reports from the full-screen Admin Home, so
+    // this section is hidden for admin inside a branch — only sub_admin sees it
+    // (and only their one allowed item, User Management).
     label: 'Administration',
-    roles: ['admin', 'sub_admin'],
+    roles: ['sub_admin'],
     items: [
       { to: '/all-branches', icon: BarChart3, label: 'All Branches Report', roles: ['admin'] },
       { to: '/users', icon: UserCog, label: 'User Management', roles: ['admin', 'sub_admin'] },

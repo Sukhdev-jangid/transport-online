@@ -24,6 +24,8 @@ import Profile from './pages/Profile'
 import Login from './pages/Login'
 import BranchGate from './components/BranchGate'
 import AllBranchesReport from './pages/AllBranchesReport'
+import AdminHome from './pages/AdminHome'
+import AdminShell from './components/AdminShell'
 import Transporters from './pages/Transporters'
 import Crossings from './pages/Crossings'
 import TransporterAccounts from './pages/TransporterAccounts'
@@ -108,7 +110,7 @@ export default function App() {
 // The authenticated application. Routes and sidebar are gated by the user's
 // role (admin / sub_admin / staff). Staff see booking-only screens.
 function AuthedApp({ location, saveError, setSaveError, onLock }) {
-  const { loading, role, canManageUsers, canManageBranches, isStaff, activeBranch } = useRole()
+  const { loading, role, canManageUsers, canManageBranches, isStaff, isAdmin, activeBranch } = useRole()
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-screen gap-4 font-sans bg-white">
@@ -131,6 +133,22 @@ function AuthedApp({ location, saveError, setSaveError, onLock }) {
     </div>
   )
 
+  // Admin Home + the management screens are full-screen with no app header/
+  // sidebar. Admin Home is the "pick a branch" landing; the others open from it
+  // and carry a Back-to-Admin-Home bar instead of the normal chrome.
+  if (isAdmin && location.pathname === '/admin-home') {
+    return <AdminHome onLock={onLock} />
+  }
+  if (isAdmin && location.pathname === '/branches') {
+    return <AdminShell title="Manage Branches" onLock={onLock}><Branches /></AdminShell>
+  }
+  if (isAdmin && location.pathname === '/users') {
+    return <AdminShell title="Manage Users" onLock={onLock}><UsersPage /></AdminShell>
+  }
+  if (isAdmin && location.pathname === '/all-branches') {
+    return <AdminShell title="All Branches Report" onLock={onLock}><AllBranchesReport /></AdminShell>
+  }
+
   return (
     <Layout onLock={onLock}>
       {saveError && (
@@ -152,7 +170,7 @@ function AuthedApp({ location, saveError, setSaveError, onLock }) {
               pick ONE branch from the header switcher before any of these
               render (on "All Branches" they show a "select a branch" prompt).
               Non-admins pass straight through — they have a single branch. */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to={isAdmin ? '/admin-home' : '/dashboard'} replace />} />
           <Route path="/dashboard" element={<BranchGate><Dashboard /></BranchGate>} />
           <Route path="/lr-entry" element={<BranchGate><LREntry /></BranchGate>} />
           <Route path="/lr-entry/:lrNumber" element={<BranchGate><LREntry /></BranchGate>} />

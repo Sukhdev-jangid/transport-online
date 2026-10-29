@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, Settings, Lock, FileText, User, Truck, ClipboardList, Building2, Check, ChevronDown } from 'lucide-react'
+import { Search, Plus, Settings, Lock, FileText, User, Truck, ClipboardList, Building2, Check, ChevronDown, LayoutGrid } from 'lucide-react'
 import { COMPANY } from '../config/company'
 import { getLREntries, getCustomers, getVehicles } from '../db/database'
 import { useRole } from '../context/RoleContext'
@@ -10,6 +10,7 @@ import { useRole } from '../context/RoleContext'
 // never see this — they are locked to their single home branch.
 function BranchSwitcher() {
   const { isAdmin, branches, activeBranch, switchBranch } = useRole()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -26,7 +27,19 @@ function BranchSwitcher() {
 
   const choose = (id) => { switchBranch(id); setOpen(false) }
 
+  // Leave the current branch and go back to the admin landing page.
+  const backToAll = async () => { await switchBranch(null); setOpen(false); navigate('/admin-home') }
+
   return (
+    <div className="flex items-center gap-1.5">
+    {activeBranch != null && (
+      <button onClick={backToAll} title="Back to all branches"
+        className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white
+                   text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:border-primary-300 transition cursor-pointer">
+        <LayoutGrid size={14} className="text-primary-600 shrink-0" />
+        <span className="hidden lg:inline">Admin Home</span>
+      </button>
+    )}
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(o => !o)}
@@ -45,17 +58,6 @@ function BranchSwitcher() {
             Working in
           </div>
           <ul className="max-h-72 overflow-y-auto py-1">
-            <li>
-              <button
-                onClick={() => choose(null)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition">
-                <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-                  <Building2 size={13} />
-                </span>
-                <span className="flex-1 text-xs font-semibold text-slate-800">All Branches</span>
-                {activeBranch == null && <Check size={14} className="text-primary-600 shrink-0" />}
-              </button>
-            </li>
             {branches.map(b => (
               <li key={b.id}>
                 <button
@@ -78,6 +80,7 @@ function BranchSwitcher() {
           </ul>
         </div>
       )}
+    </div>
     </div>
   )
 }
